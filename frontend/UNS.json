@@ -1,0 +1,307 @@
+{
+  "version": "v1",
+  "site": "SG01",
+  "topics": [
+    {
+      "id": "pm1_metric_speed",
+      "path": "v1/SG01/PaperMill/PM1/Metrics/speed",
+      "type": "metric",
+      "label": "PM1 Machine Speed",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "pm1_metric_productionRate",
+      "path": "v1/SG01/PaperMill/PM1/Metrics/productionRate",
+      "type": "metric",
+      "label": "PM1 Production Rate",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "pm1_state_status",
+      "path": "v1/SG01/PaperMill/PM1/State/status",
+      "type": "state",
+      "label": "PM1 Machine Status",
+      "payloadSchema": { "value": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "pm1_state_activeWorkOrder",
+      "path": "v1/SG01/PaperMill/PM1/State/activeWorkOrder",
+      "type": "state",
+      "label": "PM1 Active Work Order",
+      "payloadSchema": { "value": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "pm1_action_start",
+      "path": "v1/SG01/PaperMill/PM1/Action/start",
+      "type": "action",
+      "label": "PM1 Start Machine",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "pm1_action_stop",
+      "path": "v1/SG01/PaperMill/PM1/Action/stop",
+      "type": "action",
+      "label": "PM1 Stop Machine",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "pm1_info_alarm",
+      "path": "v1/SG01/PaperMill/PM1/Info/alarm",
+      "type": "info",
+      "label": "PM1 Alarm",
+      "payloadSchema": { "eventId": "string", "ts": "number", "level": "string", "code": "string" }
+    },
+    {
+      "id": "pm2_metric_speed",
+      "path": "v1/SG01/PaperMill/PM2/Metrics/speed",
+      "type": "metric",
+      "label": "PM2 Machine Speed",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "pm2_metric_productionRate",
+      "path": "v1/SG01/PaperMill/PM2/Metrics/productionRate",
+      "type": "metric",
+      "label": "PM2 Production Rate",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "pm2_state_status",
+      "path": "v1/SG01/PaperMill/PM2/State/status",
+      "type": "state",
+      "label": "PM2 Machine Status",
+      "payloadSchema": { "value": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "pm2_state_activeWorkOrder",
+      "path": "v1/SG01/PaperMill/PM2/State/activeWorkOrder",
+      "type": "state",
+      "label": "PM2 Active Work Order",
+      "payloadSchema": { "value": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "pm2_action_start",
+      "path": "v1/SG01/PaperMill/PM2/Action/start",
+      "type": "action",
+      "label": "PM2 Start Machine",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "pm2_action_stop",
+      "path": "v1/SG01/PaperMill/PM2/Action/stop",
+      "type": "action",
+      "label": "PM2 Stop Machine",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "pm2_info_alarm",
+      "path": "v1/SG01/PaperMill/PM2/Info/alarm",
+      "type": "info",
+      "label": "PM2 Alarm",
+      "payloadSchema": { "eventId": "string", "ts": "number", "level": "string", "code": "string" }
+    },
+    {
+      "id": "pm3_metric_speed",
+      "path": "v1/SG01/PaperMill/PM3/Metrics/speed",
+      "type": "metric",
+      "label": "PM3 Machine Speed",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "pm3_metric_productionRate",
+      "path": "v1/SG01/PaperMill/PM3/Metrics/productionRate",
+      "type": "metric",
+      "label": "PM3 Production Rate",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "pm3_state_status",
+      "path": "v1/SG01/PaperMill/PM3/State/status",
+      "type": "state",
+      "label": "PM3 Machine Status",
+      "payloadSchema": { "value": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "pm3_state_activeWorkOrder",
+      "path": "v1/SG01/PaperMill/PM3/State/activeWorkOrder",
+      "type": "state",
+      "label": "PM3 Active Work Order",
+      "payloadSchema": { "value": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "pm3_action_start",
+      "path": "v1/SG01/PaperMill/PM3/Action/start",
+      "type": "action",
+      "label": "PM3 Start Machine",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "pm3_action_stop",
+      "path": "v1/SG01/PaperMill/PM3/Action/stop",
+      "type": "action",
+      "label": "PM3 Stop Machine",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "pm3_info_alarm",
+      "path": "v1/SG01/PaperMill/PM3/Info/alarm",
+      "type": "info",
+      "label": "PM3 Alarm",
+      "payloadSchema": { "eventId": "string", "ts": "number", "level": "string", "code": "string" }
+    },
+    {
+      "id": "pm4_metric_speed",
+      "path": "v1/SG01/PaperMill/PM4/Metrics/speed",
+      "type": "metric",
+      "label": "PM4 Machine Speed",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "pm4_metric_productionRate",
+      "path": "v1/SG01/PaperMill/PM4/Metrics/productionRate",
+      "type": "metric",
+      "label": "PM4 Production Rate",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "pm4_state_status",
+      "path": "v1/SG01/PaperMill/PM4/State/status",
+      "type": "state",
+      "label": "PM4 Machine Status",
+      "payloadSchema": { "value": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "pm4_state_activeWorkOrder",
+      "path": "v1/SG01/PaperMill/PM4/State/activeWorkOrder",
+      "type": "state",
+      "label": "PM4 Active Work Order",
+      "payloadSchema": { "value": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "pm4_action_start",
+      "path": "v1/SG01/PaperMill/PM4/Action/start",
+      "type": "action",
+      "label": "PM4 Start Machine",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "pm4_action_stop",
+      "path": "v1/SG01/PaperMill/PM4/Action/stop",
+      "type": "action",
+      "label": "PM4 Stop Machine",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "pm4_info_alarm",
+      "path": "v1/SG01/PaperMill/PM4/Info/alarm",
+      "type": "info",
+      "label": "PM4 Alarm",
+      "payloadSchema": { "eventId": "string", "ts": "number", "level": "string", "code": "string" }
+    },
+    {
+      "id": "wo_state_status",
+      "path": "v1/SG01/PaperMill/WorkOrder/State/status",
+      "type": "state",
+      "label": "Work Order Status",
+      "payloadSchema": { "value": "string", "workOrderId": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "wo_metric_actualQty",
+      "path": "v1/SG01/PaperMill/WorkOrder/Metrics/actualQty",
+      "type": "metric",
+      "label": "Work Order Actual Quantity",
+      "payloadSchema": { "value": "number", "unit": "string", "workOrderId": "string", "ts": "number" }
+    },
+    {
+      "id": "wo_metric_scrapQty",
+      "path": "v1/SG01/PaperMill/WorkOrder/Metrics/scrapQty",
+      "type": "metric",
+      "label": "Work Order Scrap Quantity",
+      "payloadSchema": { "value": "number", "unit": "string", "workOrderId": "string", "ts": "number" }
+    },
+    {
+      "id": "wo_action_start",
+      "path": "v1/SG01/PaperMill/WorkOrder/Action/start",
+      "type": "action",
+      "label": "Start Work Order",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "wo_action_pause",
+      "path": "v1/SG01/PaperMill/WorkOrder/Action/pause",
+      "type": "action",
+      "label": "Pause Work Order",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "wo_action_complete",
+      "path": "v1/SG01/PaperMill/WorkOrder/Action/complete",
+      "type": "action",
+      "label": "Complete Work Order",
+      "payloadSchema": { "cmdId": "string", "requestedAt": "number", "params": "object" }
+    },
+    {
+      "id": "quality_metric_basisWeight",
+      "path": "v1/SG01/PaperMill/Quality/Metrics/basisWeight",
+      "type": "metric",
+      "label": "Quality Basis Weight",
+      "payloadSchema": { "value": "number", "unit": "string", "workOrderId": "string", "ts": "number" }
+    },
+    {
+      "id": "quality_metric_moisture",
+      "path": "v1/SG01/PaperMill/Quality/Metrics/moisture",
+      "type": "metric",
+      "label": "Quality Moisture",
+      "payloadSchema": { "value": "number", "unit": "string", "workOrderId": "string", "ts": "number" }
+    },
+    {
+      "id": "quality_state_result",
+      "path": "v1/SG01/PaperMill/Quality/State/result",
+      "type": "state",
+      "label": "Quality Result",
+      "payloadSchema": { "value": "string", "workOrderId": "string", "updatedAt": "number", "ver": "number" }
+    },
+    {
+      "id": "kpi_metric_oee",
+      "path": "v1/SG01/PaperMill/KPI/Metrics/oee",
+      "type": "metric",
+      "label": "Overall OEE",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "kpi_metric_utilization",
+      "path": "v1/SG01/PaperMill/KPI/Metrics/utilization",
+      "type": "metric",
+      "label": "Machine Utilization",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "kpi_metric_scrapRate",
+      "path": "v1/SG01/PaperMill/KPI/Metrics/scrapRate",
+      "type": "metric",
+      "label": "Scrap Rate",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "kpi_metric_productionAchievement",
+      "path": "v1/SG01/PaperMill/KPI/Metrics/productionAchievement",
+      "type": "metric",
+      "label": "Production Achievement",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "kpi_metric_throughput",
+      "path": "v1/SG01/PaperMill/KPI/Metrics/throughput",
+      "type": "metric",
+      "label": "Production Throughput",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    },
+    {
+      "id": "kpi_metric_downtime",
+      "path": "v1/SG01/PaperMill/KPI/Metrics/downtime",
+      "type": "metric",
+      "label": "Downtime",
+      "payloadSchema": { "value": "number", "unit": "string", "ts": "number" }
+    }
+  ]
+}

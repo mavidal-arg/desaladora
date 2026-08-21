@@ -1,0 +1,22 @@
+# Desaladora Coquimbo V2 — Next.js standalone + Prisma 7.
+# El build corre DENTRO de Docker (frontend/deploy/Dockerfile), no en el host:
+# acá nunca hubo node_modules ni .next que trackear.
+node_modules/
+.next/
+out/
+
+# Secretos. El DATABASE_URL real vive SÓLO en frontend/.env — ver .env.example.
+.env
+.env.*
+!.env.example
+
+# Cliente Prisma generado (1,6 MB). Lo rehace `npx prisma generate` en la etapa
+# de build del Dockerfile, así que un clon fresco compila igual.
+frontend/src/generated/
+
+# Cachés y artefactos
+*.tsbuildinfo
+.tmp/
+*.log
+npm-debug.log*
+.DS_Store

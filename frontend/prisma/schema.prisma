@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Functional Location (technical-location tree, self-FK) ───
+model FunctionalLocation {
+  id          String               @id
+  code        String               @unique
+  name        String
+  area        String
+  criticality String               @default("medium") // low, medium, high, critical
+  parentId    String?
+  parent      FunctionalLocation?  @relation("FLTree", fields: [parentId], references: [id])
+  children    FunctionalLocation[] @relation("FLTree")
+  equipment   Equipment[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+}
+
+// ─── Equipment (central entity, the EAM "asset") ───
+model Equipment {
+  id                   String              @id
+  code                 String              @unique // P-101, RB01, TG01…
+  name                 String
+  category             String              // Pumps, Compressors, Heat Exchangers, Reactors, Storage Tanks…
+  location             String              // human label, e.g. "Workshop A-Zone 1"
+  functionalLocationId String?
+  functionalLocation   FunctionalLocation? @relation(fields: [functionalLocationId], references: [id])
+  manufacturer         String
+  model                String
+  serialNumber         String
+  installDate          DateTime
+  commissionDate       DateTime
+  warrantyExpiry       DateTime
+  specs                Json                // { power, voltage, "Flow Rate", Head, … }
+  criticality          String              @default("medium") // low, medium, high, critical
+  status               String              @default("running") // running, stopped, maintenance, idle
+  healthIndex          Float               @default(100)
+  runtimeHours         Float               @default(0)
+  signals              PiSignal[]
+  workOrders           WorkOrder[]
+  plans                MaintenancePlan[]
+  spareParts           SparePart[]
+  documents            SeDocument[]
+  nonConformities      NonConformity[]
+  predictive           PredictiveProfile?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+}
+
+// ─── PI signal catalog (per equipment) ───
+model PiSignal {
+  id          String      @id
+  equipmentId String
+  equipment   Equipment   @relation(fields: [equipmentId], references: [id])
+  signal      String      // bearingVibration, motorCurrent, drumPressure…
+  unit        String
+  readings    PiReading[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([equipmentId, signal])
+}
+
+// ─── PI readings (cached time series, mirror of PI Web API) ───
+model PiReading {
+  id        String   @id @default(cuid())
+  signalId  String
+  signal    PiSignal @relation(fields: [signalId], references: [id])
+  ts        DateTime
+  value     Float
+  quality   String   @default("good") // good, bad, uncertain
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([signalId, ts])
+}
+
+// ─── Work Orders (SAP PM) ───
+model WorkOrder {
+  id           String    @id
+  code         String    @unique // WO-2026-001
+  equipmentId  String
+  equipment    Equipment @relation(fields: [equipmentId], references: [id])
+  orderType    String    // preventive, corrective, emergency, predictive
+  status       String    @default("pending") // pending, assigned, approved, in_progress, completed
+  priority     String    @default("medium") // low, medium, high, critical
+  assignee     String?
+  description  String
+  openedAt     DateTime  @default(now())
+  dueAt        DateTime?
+  closedAt     DateTime?
+  costEstimate Float?
+  costActual   Float?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ─── Maintenance Plans (preventive/runtime strategy) ───
+model MaintenancePlan {
+  id            String    @id
+  equipmentId   String
+  equipment     Equipment @relation(fields: [equipmentId], references: [id])
+  strategy      String    // daily, monthly, runtime, predictive
+  intervalLabel String
+  nextDueAt     DateTime
+  taskList      Json      // string[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ─── Spare Parts (SAP MM) ───
+model SparePart {
+  id              String     @id
+  code            String     @unique
+  name            String
+  specification   String
+  category        String     // Seals, Bearings, Filters…
+  equipmentId     String?
+  equipment       Equipment? @relation(fields: [equipmentId], references: [id])
+  quantity        Int        @default(0)
+  safetyStock     Int        @default(0)
+  unit            String     @default("pcs")
+  unitCost        Float      @default(0)
+  consumedLast30d Int        @default(0)
+  replacedCount   Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+// ─── Tools (tool room) ───
+model Tool {
+  id              String   @id
+  code            String   @unique
+  name            String
+  toolRoom        String
+  storageLocation String
+  available       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── SE Suite documents (SOPs, P&IDs, procedures) ───
+model SeDocument {
+  id          String     @id
+  code        String     @unique
+  equipmentId String?
+  equipment   Equipment? @relation(fields: [equipmentId], references: [id])
+  title       String
+  docType     String     // SOP, P&ID, safety, manual
+  revision    String
+  docDate     DateTime
+  url         String
+  steps       Json       // string[] (procedure steps)
+  safetyNotes Json       // string[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+// ─── Non-Conformities (SE Suite) ───
+model NonConformity {
+  id          String    @id
+  code        String    @unique
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id])
+  severity    String    // low, medium, high, critical
+  description String
+  status      String    @default("open") // open, in_review, closed
+  raisedAt    DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─── Inspection Routes (patrol routes + checklist + task history) ───
+model InspectionRoute {
+  id               String   @id
+  code             String   @unique
+  name             String
+  category         String   @default("patrol") // patrol, special, measuring
+  frequency        String   // daily, weekly, monthly
+  nextInspectionAt DateTime
+  inspector        String
+  equipmentIds     Json     // string[]
+  checkpoints      Json     // [{ item, body, expected, leakStatus }]
+  tasks            Json     // [{ date, inspector, status, startedAt }]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ─── Predictive profile (1:1 with equipment) ───
+model PredictiveProfile {
+  id             String    @id
+  equipmentId    String    @unique
+  equipment      Equipment @relation(fields: [equipmentId], references: [id])
+  configured     Boolean   @default(false)
+  healthScore    Float     @default(100)
+  trend          String    @default("stable") // up, stable, down, declining
+  predFailureDays Int?
+  anomalies      Json      // [{ param, value, delta }]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Proceso Desal — registro de producción diario (KPIs del dashboard /proceso).
+// ─────────────────────────────────────────────────────────────────────────────
+model ProductionLog {
+  id            String   @id
+  day           DateTime // día de producción
+  phase         Int      @default(1)
+  feedM3        Float             // agua de mar alimentada (m³/día)
+  permeateM3    Float             // agua producida (m³/día)
+  recoveryPct   Float             // recovery global (%)
+  energyKwhM3   Float             // consumo específico (kWh/m³)
+  productTds    Float             // SDT del producto (mg/l)
+  saltRejection Float             // rechazo de sales (%)
+  availability  Float             // disponibilidad de trenes (%)
+  // ── Gemelo Digital (rollup diario de las señales virtuales de los racks RO) ──
+  rfAvg         Float?            // Rf normalizado promedio de los trenes RO (1/m)
+  secComputed   Float?            // SEC neto computado (con ERI) promedio (kWh/m³)
+  tmpAvg        Float?            // TMP promedio de los trenes RO (bar)
+  cipDays       Int?              // RUL: días al próximo CIP (tren más próximo al umbral)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gemelo Digital — evento de CIP (lavado químico) por tren RO.
+// Cada cruce del umbral de ensuciamiento (Rf > rf_base·1.15) genera un CipEvent
+// y la serie del tren cae de vuelta a la base (recuperación post-lavado).
+// ─────────────────────────────────────────────────────────────────────────────
+model CipEvent {
+  id        String   @id @default(cuid())
+  day       DateTime
+  trainCode String
+  rfBefore  Float
+  rfAfter   Float
+  secBefore Float
+  secAfter  Float
+  trigger   String   // "rf_threshold" | "sec_threshold" | "scheduled"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OEE / Eficiencia RO — módulo de producción portado del análisis EQR-APP1.
+// Trenes RO = racks A25-x (Equipment category="Membranes"). No se crean equipos:
+// estos modelos referencian el rack por su `code` (trainCode), respetando el
+// plant-config data-driven. OEE = Disponibilidad × Rendimiento × Calidad.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Turnos operativos + metas de producción y umbrales de OEE.
+model ShiftDef {
+  id             String   @id
+  name           String
+  startHour      Int      // 0-23
+  endHour        Int      // 0-23
+  targetM3h      Float    // meta de producción por tren (m³/h)
+  oeeTarget      Float    // umbral objetivo (%)
+  oeeAcceptable  Float    // umbral aceptable (%)
+  oeeCritical    Float    // umbral crítico (%)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Registro de paradas por tren RO con clasificación de causa raíz (→ Pareto).
+model DowntimeEvent {
+  id          String    @id @default(cuid())
+  trainCode   String    // A25-1..4
+  type        String    // planificada | no_planificada
+  cause       String    // mecanica | electrica | instrumentacion | proceso | externa
+  startTime   DateTime
+  endTime     DateTime?
+  durationMin Int?      // minutos (null = parada en curso)
+  description String
+  validated   Boolean   @default(false)
+  validatedBy String?
+  createdBy   String
+  shiftId     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([trainCode, startTime])
+}
+
+// Mediciones de calidad del permeado por tren vs límites de especificación.
+model QualityReading {
+  id           String   @id @default(cuid())
+  trainCode    String   // A25-1..4
+  ts           DateTime
+  conductivity Float    // µS/cm
+  tds          Float    // ppm / mg/l
+  ph           Float
+  boron        Float    // mg/l
+  status       String   // conforme | no_conforme
+  notes        String   @default("")
+  createdBy    String
+  shiftId      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([trainCode, ts])
+}
+
+// Reglas configurables del motor de alertas.
+model AlertRule {
+  id        String   @id
+  name      String
+  metric    String   // oee | availability | performance | quality | conductivity | boron | tds | ph | downtime
+  op        String   // lt | gt
+  threshold Float
+  level     String   // critico | advertencia | info
+  enabled   Boolean  @default(true)
+  trainCode String?  // null = todos los trenes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Instancias de alerta (workflow activa → reconocida → resuelta).
+model AlertEvent {
+  id          String    @id @default(cuid())
+  ruleId      String
+  trainCode   String?
+  level       String    // critico | advertencia | info
+  status      String    @default("activa") // activa | reconocida | resuelta
+  message     String
+  ts          DateTime  @default(now())
+  ackBy       String?
+  ackAt       DateTime?
+  resolvedAt  DateTime?
+  actionTaken String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, ts])
+}
+
+// Config de planta editable (singleton) — fuente data-driven del mímico/áreas.
+// Permite replicar/customizar la app sin tocar código (motor de replicación).
+model PlantConfig {
+  id        String   @id @default("singleton")
+  data      Json     // objeto PlantConfig completo (ver src/lib/plant-config.ts)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}

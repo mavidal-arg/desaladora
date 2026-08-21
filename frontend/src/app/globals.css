@@ -1,0 +1,201 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── Light Mode ─── */
+:root {
+  --accent: #00843D;
+  --accent-strong: #006B31;
+  --accent-light: #E8F5EE;
+  --suzano-blue: #003366;
+  --suzano-blue-light: #0A4B8F;
+  --muted: oklch(0.97 0 0);
+  --border: oklch(0.922 0 0);
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: #003366;
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent-foreground: #ffffff;
+  --destructive: oklch(0.577 0.245 27.325);
+  --input: oklch(0.922 0 0);
+  --ring: #003366;
+  --chart-1: #00843D;
+  --chart-2: #003366;
+  --chart-3: #0A4B8F;
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: #003366;
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* ─── Dark Mode ─── */
+.dark {
+  /* Paleta corporativa AGUAS DEL VALLE (azul) — tema live de la app */
+  --accent: #00A9E0;
+  --accent-strong: #34BEEA;
+  --accent-light: rgba(0,169,224,0.14);
+  --suzano-blue: #2E7D6B;
+  --suzano-blue-light: #4DB6A4;
+  --muted: oklch(0.2 0 0);
+  --border: oklch(0.28 0 0);
+  --background: oklch(0.12 0 0);
+  --foreground: oklch(0.93 0 0);
+  --card: oklch(0.16 0 0);
+  --card-foreground: oklch(0.93 0 0);
+  --popover: oklch(0.16 0 0);
+  --popover-foreground: oklch(0.93 0 0);
+  --primary: #00A9E0;
+  --primary-foreground: oklch(0.05 0 0);
+  --secondary: oklch(0.22 0 0);
+  --secondary-foreground: oklch(0.9 0 0);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent-foreground: oklch(0.05 0 0);
+  --destructive: oklch(0.65 0.25 27);
+  --input: oklch(0.25 0 0);
+  --ring: #00A9E0;
+  --chart-1: #00A9E0;
+  --chart-2: #26A69A;
+  --chart-3: #66BB6A;
+  --chart-4: oklch(0.6 0 0);
+  --chart-5: oklch(0.75 0 0);
+  --sidebar: oklch(0.14 0 0);
+  --sidebar-foreground: oklch(0.9 0 0);
+  --sidebar-primary: #00A9E0;
+  --sidebar-primary-foreground: oklch(0.05 0 0);
+  --sidebar-accent: oklch(0.2 0 0);
+  --sidebar-accent-foreground: oklch(0.9 0 0);
+  --sidebar-border: oklch(0.28 0 0);
+  --sidebar-ring: oklch(0.5 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+body {
+  /* Western UI sans (Inter via --font-sans, set by next/font on <html>),
+     falling back to the OS-native system stack. IBM Plex Mono stays available
+     via the `font-mono` utility for code-like fields (asset / WO / part codes). */
+  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  /* Native scrollbars / form controls follow the dark theme. */
+  .dark {
+    color-scheme: dark;
+  }
+}
+
+/* ─── EAM visual polish (additive) ───────────────────────────── */
+
+/* Tabular figures keep metrics aligned in the monospace grid. */
+.eam-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Surface with a faint top highlight + soft depth — atmosphere without color. */
+.eam-card {
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+    0 1px 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* Staggered fade-up reveal on page load; disabled under reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes eam-rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .eam-stagger > * {
+    animation: eam-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .eam-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+  .eam-stagger > *:nth-child(2) { animation-delay: 0.05s; }
+  .eam-stagger > *:nth-child(3) { animation-delay: 0.08s; }
+  .eam-stagger > *:nth-child(4) { animation-delay: 0.11s; }
+  .eam-stagger > *:nth-child(5) { animation-delay: 0.14s; }
+  .eam-stagger > *:nth-child(6) { animation-delay: 0.17s; }
+  .eam-stagger > *:nth-child(n + 7) { animation-delay: 0.2s; }
+
+  @keyframes eam-modal-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+  }
+  .eam-modal-in { animation: eam-modal-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  @keyframes eam-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .eam-fade-in { animation: eam-fade-in 0.18s ease-out both; }
+}
+
+/* Shared focus ring — accent-colored, offset from the dark background. */
+.eam-focus:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--accent);
+}

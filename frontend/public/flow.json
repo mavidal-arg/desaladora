@@ -1,0 +1,864 @@
+[
+  {
+    "id": "d54aff3e6a0e6e69",
+    "type": "tab",
+    "label": "Desaladora Coquimbo - Twin Digital DPCQ01",
+    "disabled": false,
+    "info": "Gemelo Digital RO: raw -> twin_engine.py --compute -> Calculated + persistencia."
+  },
+  {
+    "id": "n_twin_a251_raw",
+    "type": "mqtt in",
+    "z": "d54aff3e6a0e6e69",
+    "name": "A25-1 Raw MQTT",
+    "topic": "v1/DPCQ01/RO/A25-1/Telemetry/Raw",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "",
+    "nl": false,
+    "x": 120,
+    "y": 80,
+    "wires": [
+      [
+        "n_twin_a251_build"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a251_build",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Build A25-1 Telemetry",
+    "func": "var p = msg.payload || {};\nvar recovery = Number(p.recovery);\nvar pFeed = Number(p.pressure);\nif (isNaN(pFeed)) pFeed = Number(p.hppPressure);\nvar dpTmp = Number(p.dpTmp);\nvar qFeed = Number(p.feedFlow);\nvar qPerm = qFeed * recovery / 100;\nvar telemetry = {\n  train_id: 'A25-1',\n  ts: p.ts || Date.now(),\n  P_feed: pFeed,\n  P_ret: pFeed - dpTmp,\n  P_perm: 0.5,\n  Q_feed: qFeed,\n  Q_perm: qPerm,\n  Q_ret: qFeed - qPerm,\n  Temp: Number(p.feedTemp),\n  TDS_feed: Number(p.feedTds),\n  TDS_perm: Number(p.permeateTds),\n  Power_HPP: 500,\n  Power_ERS: 300 * ((Number(p.eriEfficiency)||96) / 96)\n};\nvar specs = { Membrane_Area: 11446.4, Rm: 4.5e14 };\nmsg.payload = Buffer.from(JSON.stringify({ telemetry: telemetry, specs: specs })).toString('base64');\nreturn msg;",
+    "outputs": 1,
+    "x": 340,
+    "y": 80,
+    "wires": [
+      [
+        "n_twin_a251_exec",
+        "n_twin_a251_build_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a251_build_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-1 Build",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 340,
+    "y": 130,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a251_exec",
+    "type": "exec",
+    "z": "d54aff3e6a0e6e69",
+    "name": "twin_engine A25-1",
+    "command": "bash -c 'echo \"$0\" | base64 -d | /home/mariano/.local/bin/uv run --no-project /home/mariano/tools/twin/twin_engine.py --compute'",
+    "addpay": true,
+    "append": "",
+    "useSpawn": "false",
+    "timer": "20",
+    "winHide": false,
+    "oldrc": false,
+    "x": 560,
+    "y": 80,
+    "wires": [
+      [
+        "n_twin_a251_parse"
+      ],
+      [
+        "n_twin_a251_exec_dbg"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "n_twin_a251_exec_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-1 stderr",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 130,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a251_parse",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Parse A25-1 Calculated",
+    "func": "var c;\ntry { c = (typeof msg.payload === 'string') ? JSON.parse(msg.payload) : msg.payload; }\ncatch (e) { node.error('C1 parse error: ' + e + ' raw=' + msg.payload); return null; }\nif (!c || typeof c.R_f === 'undefined') { node.warn('empty C1'); return null; }\nvar post = RED.util.cloneMessage(msg);\npost.payload = c;\npost.headers = { 'Content-Type': 'application/json' };\n// salud derivada [inferencia]: castiga polarizacion y fouling\nvar health = 100;\nif (c.beta > 1.15) health -= (c.beta - 1.15) * 200;\nif (c.Rf_norm > 0) health -= Math.min(40, c.Rf_norm / c.R_Total * 100);\nhealth = Math.max(0, Math.min(100, Math.round(health)));\nvar trend = (c.cip_days !== null && c.cip_days < 14) ? 'critical' : (c.Rf_norm > 0 ? 'rising' : 'stable');\nvar healthMsg = { topic: 'v1/DPCQ01/RO/A25-1/State/health', payload: { value: health, trend: trend, updatedAt: Date.now() } };\nreturn [post, healthMsg];",
+    "outputs": 2,
+    "x": 790,
+    "y": 80,
+    "wires": [
+      [
+        "n_twin_a251_calc_mqtt",
+        "n_twin_a251_ingest",
+        "n_twin_a251_parse_dbg"
+      ],
+      [
+        "n_twin_a251_health_mqtt"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a251_parse_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-1 C1",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 790,
+    "y": 130,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a251_calc_mqtt",
+    "type": "mqtt out",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Pub A25-1 Calculated",
+    "topic": "v1/DPCQ01/RO/A25-1/Metrics/Calculated",
+    "qos": "1",
+    "retain": false,
+    "broker": "",
+    "x": 1030,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a251_ingest",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "POST A25-1 Ingest",
+    "method": "POST",
+    "url": "http://localhost:3000/api/twin/ingest",
+    "ret": "obj",
+    "x": 1030,
+    "y": 100,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n_twin_a251_health_mqtt",
+    "type": "mqtt out",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Pub A25-1 Health",
+    "topic": "v1/DPCQ01/RO/A25-1/State/health",
+    "qos": "1",
+    "retain": true,
+    "broker": "",
+    "x": 1030,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a252_raw",
+    "type": "mqtt in",
+    "z": "d54aff3e6a0e6e69",
+    "name": "A25-2 Raw MQTT",
+    "topic": "v1/DPCQ01/RO/A25-2/Telemetry/Raw",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "",
+    "nl": false,
+    "x": 120,
+    "y": 360,
+    "wires": [
+      [
+        "n_twin_a252_build"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a252_build",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Build A25-2 Telemetry",
+    "func": "var p = msg.payload || {};\nvar recovery = Number(p.recovery);\nvar pFeed = Number(p.pressure);\nif (isNaN(pFeed)) pFeed = Number(p.hppPressure);\nvar dpTmp = Number(p.dpTmp);\nvar qFeed = Number(p.feedFlow);\nvar qPerm = qFeed * recovery / 100;\nvar telemetry = {\n  train_id: 'A25-2',\n  ts: p.ts || Date.now(),\n  P_feed: pFeed,\n  P_ret: pFeed - dpTmp,\n  P_perm: 0.5,\n  Q_feed: qFeed,\n  Q_perm: qPerm,\n  Q_ret: qFeed - qPerm,\n  Temp: Number(p.feedTemp),\n  TDS_feed: Number(p.feedTds),\n  TDS_perm: Number(p.permeateTds),\n  Power_HPP: 500,\n  Power_ERS: 300 * ((Number(p.eriEfficiency)||96) / 96)\n};\nvar specs = { Membrane_Area: 11446.4, Rm: 4.5e14 };\nmsg.payload = Buffer.from(JSON.stringify({ telemetry: telemetry, specs: specs })).toString('base64');\nreturn msg;",
+    "outputs": 1,
+    "x": 340,
+    "y": 360,
+    "wires": [
+      [
+        "n_twin_a252_exec",
+        "n_twin_a252_build_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a252_build_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-2 Build",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 340,
+    "y": 410,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a252_exec",
+    "type": "exec",
+    "z": "d54aff3e6a0e6e69",
+    "name": "twin_engine A25-2",
+    "command": "bash -c 'echo \"$0\" | base64 -d | /home/mariano/.local/bin/uv run --no-project /home/mariano/tools/twin/twin_engine.py --compute'",
+    "addpay": true,
+    "append": "",
+    "useSpawn": "false",
+    "timer": "20",
+    "winHide": false,
+    "oldrc": false,
+    "x": 560,
+    "y": 360,
+    "wires": [
+      [
+        "n_twin_a252_parse"
+      ],
+      [
+        "n_twin_a252_exec_dbg"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "n_twin_a252_exec_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-2 stderr",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 410,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a252_parse",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Parse A25-2 Calculated",
+    "func": "var c;\ntry { c = (typeof msg.payload === 'string') ? JSON.parse(msg.payload) : msg.payload; }\ncatch (e) { node.error('C1 parse error: ' + e + ' raw=' + msg.payload); return null; }\nif (!c || typeof c.R_f === 'undefined') { node.warn('empty C1'); return null; }\nvar post = RED.util.cloneMessage(msg);\npost.payload = c;\npost.headers = { 'Content-Type': 'application/json' };\n// salud derivada [inferencia]: castiga polarizacion y fouling\nvar health = 100;\nif (c.beta > 1.15) health -= (c.beta - 1.15) * 200;\nif (c.Rf_norm > 0) health -= Math.min(40, c.Rf_norm / c.R_Total * 100);\nhealth = Math.max(0, Math.min(100, Math.round(health)));\nvar trend = (c.cip_days !== null && c.cip_days < 14) ? 'critical' : (c.Rf_norm > 0 ? 'rising' : 'stable');\nvar healthMsg = { topic: 'v1/DPCQ01/RO/A25-2/State/health', payload: { value: health, trend: trend, updatedAt: Date.now() } };\nreturn [post, healthMsg];",
+    "outputs": 2,
+    "x": 790,
+    "y": 360,
+    "wires": [
+      [
+        "n_twin_a252_calc_mqtt",
+        "n_twin_a252_ingest",
+        "n_twin_a252_parse_dbg"
+      ],
+      [
+        "n_twin_a252_health_mqtt"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a252_parse_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-2 C1",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 790,
+    "y": 410,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a252_calc_mqtt",
+    "type": "mqtt out",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Pub A25-2 Calculated",
+    "topic": "v1/DPCQ01/RO/A25-2/Metrics/Calculated",
+    "qos": "1",
+    "retain": false,
+    "broker": "",
+    "x": 1030,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a252_ingest",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "POST A25-2 Ingest",
+    "method": "POST",
+    "url": "http://localhost:3000/api/twin/ingest",
+    "ret": "obj",
+    "x": 1030,
+    "y": 380,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n_twin_a252_health_mqtt",
+    "type": "mqtt out",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Pub A25-2 Health",
+    "topic": "v1/DPCQ01/RO/A25-2/State/health",
+    "qos": "1",
+    "retain": true,
+    "broker": "",
+    "x": 1030,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a253_raw",
+    "type": "mqtt in",
+    "z": "d54aff3e6a0e6e69",
+    "name": "A25-3 Raw MQTT",
+    "topic": "v1/DPCQ01/RO/A25-3/Telemetry/Raw",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "",
+    "nl": false,
+    "x": 120,
+    "y": 640,
+    "wires": [
+      [
+        "n_twin_a253_build"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a253_build",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Build A25-3 Telemetry",
+    "func": "var p = msg.payload || {};\nvar recovery = Number(p.recovery);\nvar pFeed = Number(p.pressure);\nif (isNaN(pFeed)) pFeed = Number(p.hppPressure);\nvar dpTmp = Number(p.dpTmp);\nvar qFeed = Number(p.feedFlow);\nvar qPerm = qFeed * recovery / 100;\nvar telemetry = {\n  train_id: 'A25-3',\n  ts: p.ts || Date.now(),\n  P_feed: pFeed,\n  P_ret: pFeed - dpTmp,\n  P_perm: 0.5,\n  Q_feed: qFeed,\n  Q_perm: qPerm,\n  Q_ret: qFeed - qPerm,\n  Temp: Number(p.feedTemp),\n  TDS_feed: Number(p.feedTds),\n  TDS_perm: Number(p.permeateTds),\n  Power_HPP: 500,\n  Power_ERS: 300 * ((Number(p.eriEfficiency)||96) / 96)\n};\nvar specs = { Membrane_Area: 11446.4, Rm: 4.5e14 };\nmsg.payload = Buffer.from(JSON.stringify({ telemetry: telemetry, specs: specs })).toString('base64');\nreturn msg;",
+    "outputs": 1,
+    "x": 340,
+    "y": 640,
+    "wires": [
+      [
+        "n_twin_a253_exec",
+        "n_twin_a253_build_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a253_build_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-3 Build",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 340,
+    "y": 690,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a253_exec",
+    "type": "exec",
+    "z": "d54aff3e6a0e6e69",
+    "name": "twin_engine A25-3",
+    "command": "bash -c 'echo \"$0\" | base64 -d | /home/mariano/.local/bin/uv run --no-project /home/mariano/tools/twin/twin_engine.py --compute'",
+    "addpay": true,
+    "append": "",
+    "useSpawn": "false",
+    "timer": "20",
+    "winHide": false,
+    "oldrc": false,
+    "x": 560,
+    "y": 640,
+    "wires": [
+      [
+        "n_twin_a253_parse"
+      ],
+      [
+        "n_twin_a253_exec_dbg"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "n_twin_a253_exec_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-3 stderr",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 690,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a253_parse",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Parse A25-3 Calculated",
+    "func": "var c;\ntry { c = (typeof msg.payload === 'string') ? JSON.parse(msg.payload) : msg.payload; }\ncatch (e) { node.error('C1 parse error: ' + e + ' raw=' + msg.payload); return null; }\nif (!c || typeof c.R_f === 'undefined') { node.warn('empty C1'); return null; }\nvar post = RED.util.cloneMessage(msg);\npost.payload = c;\npost.headers = { 'Content-Type': 'application/json' };\n// salud derivada [inferencia]: castiga polarizacion y fouling\nvar health = 100;\nif (c.beta > 1.15) health -= (c.beta - 1.15) * 200;\nif (c.Rf_norm > 0) health -= Math.min(40, c.Rf_norm / c.R_Total * 100);\nhealth = Math.max(0, Math.min(100, Math.round(health)));\nvar trend = (c.cip_days !== null && c.cip_days < 14) ? 'critical' : (c.Rf_norm > 0 ? 'rising' : 'stable');\nvar healthMsg = { topic: 'v1/DPCQ01/RO/A25-3/State/health', payload: { value: health, trend: trend, updatedAt: Date.now() } };\nreturn [post, healthMsg];",
+    "outputs": 2,
+    "x": 790,
+    "y": 640,
+    "wires": [
+      [
+        "n_twin_a253_calc_mqtt",
+        "n_twin_a253_ingest",
+        "n_twin_a253_parse_dbg"
+      ],
+      [
+        "n_twin_a253_health_mqtt"
+      ]
+    ]
+  },
+  {
+    "id": "n_twin_a253_parse_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A25-3 C1",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 790,
+    "y": 690,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a253_calc_mqtt",
+    "type": "mqtt out",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Pub A25-3 Calculated",
+    "topic": "v1/DPCQ01/RO/A25-3/Metrics/Calculated",
+    "qos": "1",
+    "retain": false,
+    "broker": "",
+    "x": 1030,
+    "y": 620,
+    "wires": []
+  },
+  {
+    "id": "n_twin_a253_ingest",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "POST A25-3 Ingest",
+    "method": "POST",
+    "url": "http://localhost:3000/api/twin/ingest",
+    "ret": "obj",
+    "x": 1030,
+    "y": 660,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n_twin_a253_health_mqtt",
+    "type": "mqtt out",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Pub A25-3 Health",
+    "topic": "v1/DPCQ01/RO/A25-3/State/health",
+    "qos": "1",
+    "retain": true,
+    "broker": "",
+    "x": 1030,
+    "y": 700,
+    "wires": []
+  },
+  {
+    "id": "n_cip_poll",
+    "type": "inject",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Poll CIP Alert",
+    "repeat": "60",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 920,
+    "wires": [
+      [
+        "n_cip_http"
+      ]
+    ]
+  },
+  {
+    "id": "n_cip_http",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "GET CIP Recommendation",
+    "method": "GET",
+    "url": "http://localhost:3000/api/twin/cip-alert",
+    "ret": "obj",
+    "x": 340,
+    "y": 920,
+    "wires": [
+      [
+        "n_cip_fn"
+      ]
+    ]
+  },
+  {
+    "id": "n_cip_fn",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Format CIP Action",
+    "func": "var d = msg.payload;\nif (!d || !d.trainCode) return null;\nvar action = { topic: 'v1/DPCQ01/CIP/Action/cipAlert', payload: {\n  cmdId: 'cip-' + Date.now(), trainCode: d.trainCode,\n  trigger: d.trigger || 'rf_threshold', cipDays: d.cipDays,\n  rfNorm: d.rfNorm, requestedAt: Date.now() } };\nvar info = null;\nif (d.lastEvent) { info = { topic: 'v1/DPCQ01/CIP/Info/cipExecuted', payload: {\n  eventId: 'cipev-' + d.lastEvent.day, trainCode: d.lastEvent.trainCode,\n  rfBefore: d.lastEvent.rfBefore, rfAfter: d.lastEvent.rfAfter, ts: Date.now() } }; }\nreturn [action, info];",
+    "outputs": 2,
+    "x": 560,
+    "y": 920,
+    "wires": [
+      [
+        "n_cip_action_mqtt",
+        "n_cip_dbg"
+      ],
+      [
+        "n_cip_info_mqtt"
+      ]
+    ]
+  },
+  {
+    "id": "n_cip_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug CIP Action",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 970,
+    "wires": []
+  },
+  {
+    "id": "n_cip_action_mqtt",
+    "type": "mqtt out",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Pub CIP Alert",
+    "topic": "v1/DPCQ01/CIP/Action/cipAlert",
+    "qos": "1",
+    "retain": false,
+    "broker": "",
+    "x": 790,
+    "y": 900,
+    "wires": []
+  },
+  {
+    "id": "n_cip_info_mqtt",
+    "type": "mqtt out",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Pub CIP Executed",
+    "topic": "v1/DPCQ01/CIP/Info/cipExecuted",
+    "qos": "1",
+    "retain": false,
+    "broker": "",
+    "x": 790,
+    "y": 940,
+    "wires": []
+  },
+  {
+    "id": "n_intk_a1_temp_mqtt",
+    "type": "mqtt in",
+    "z": "d54aff3e6a0e6e69",
+    "name": "A1 Temperature MQTT",
+    "topic": "v1/DPCQ01/INTK/A1/Telemetry/temperature",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "",
+    "nl": false,
+    "x": 120,
+    "y": 1060,
+    "wires": [
+      [
+        "n_intk_a1_temp_fn"
+      ]
+    ]
+  },
+  {
+    "id": "n_intk_a1_temp_fn",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Parse A1 Temperature",
+    "func": "msg.payload = { assetCode: 'A1', signal: 'temperature', value: msg.payload.value, unit: msg.payload.unit, ts: msg.payload.ts };\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+    "outputs": 1,
+    "x": 340,
+    "y": 1060,
+    "wires": [
+      [
+        "n_intk_a1_temp_http",
+        "n_intk_a1_temp_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "n_intk_a1_temp_http",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "POST A1 Temperature",
+    "method": "POST",
+    "url": "http://localhost:3000/api/assets/metrics",
+    "ret": "obj",
+    "x": 560,
+    "y": 1060,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n_intk_a1_temp_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A1 Temperature",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 1110,
+    "wires": []
+  },
+  {
+    "id": "n_intk_a1_tds_mqtt",
+    "type": "mqtt in",
+    "z": "d54aff3e6a0e6e69",
+    "name": "A1 TDS MQTT",
+    "topic": "v1/DPCQ01/INTK/A1/Telemetry/tds",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "",
+    "nl": false,
+    "x": 120,
+    "y": 1160,
+    "wires": [
+      [
+        "n_intk_a1_tds_fn"
+      ]
+    ]
+  },
+  {
+    "id": "n_intk_a1_tds_fn",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Parse A1 TDS",
+    "func": "msg.payload = { assetCode: 'A1', signal: 'tds', value: msg.payload.value, unit: msg.payload.unit, ts: msg.payload.ts };\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+    "outputs": 1,
+    "x": 340,
+    "y": 1160,
+    "wires": [
+      [
+        "n_intk_a1_tds_http",
+        "n_intk_a1_tds_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "n_intk_a1_tds_http",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "POST A1 TDS",
+    "method": "POST",
+    "url": "http://localhost:3000/api/assets/metrics",
+    "ret": "obj",
+    "x": 560,
+    "y": 1160,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n_intk_a1_tds_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A1 TDS",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 1210,
+    "wires": []
+  },
+  {
+    "id": "n_hpp_a241_press_mqtt",
+    "type": "mqtt in",
+    "z": "d54aff3e6a0e6e69",
+    "name": "A24-1 Pressure MQTT",
+    "topic": "v1/DPCQ01/RO/A24-1/Telemetry/pressure",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "",
+    "nl": false,
+    "x": 120,
+    "y": 1260,
+    "wires": [
+      [
+        "n_hpp_a241_press_fn"
+      ]
+    ]
+  },
+  {
+    "id": "n_hpp_a241_press_fn",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Parse A24-1 Pressure",
+    "func": "msg.payload = { assetCode: 'A24-1', signal: 'pressure', value: msg.payload.value, unit: msg.payload.unit, ts: msg.payload.ts };\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+    "outputs": 1,
+    "x": 340,
+    "y": 1260,
+    "wires": [
+      [
+        "n_hpp_a241_press_http",
+        "n_hpp_a241_press_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "n_hpp_a241_press_http",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "POST A24-1 Pressure",
+    "method": "POST",
+    "url": "http://localhost:3000/api/assets/metrics",
+    "ret": "obj",
+    "x": 560,
+    "y": 1260,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n_hpp_a241_press_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A24-1 Pressure",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 1310,
+    "wires": []
+  },
+  {
+    "id": "n_hpp_a241_flow_mqtt",
+    "type": "mqtt in",
+    "z": "d54aff3e6a0e6e69",
+    "name": "A24-1 Flow MQTT",
+    "topic": "v1/DPCQ01/RO/A24-1/Telemetry/flow",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "",
+    "nl": false,
+    "x": 120,
+    "y": 1360,
+    "wires": [
+      [
+        "n_hpp_a241_flow_fn"
+      ]
+    ]
+  },
+  {
+    "id": "n_hpp_a241_flow_fn",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Parse A24-1 Flow",
+    "func": "msg.payload = { assetCode: 'A24-1', signal: 'flow', value: msg.payload.value, unit: msg.payload.unit, ts: msg.payload.ts };\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+    "outputs": 1,
+    "x": 340,
+    "y": 1360,
+    "wires": [
+      [
+        "n_hpp_a241_flow_http",
+        "n_hpp_a241_flow_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "n_hpp_a241_flow_http",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "POST A24-1 Flow",
+    "method": "POST",
+    "url": "http://localhost:3000/api/assets/metrics",
+    "ret": "obj",
+    "x": 560,
+    "y": 1360,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n_hpp_a241_flow_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A24-1 Flow",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 1410,
+    "wires": []
+  },
+  {
+    "id": "n_eri_a26_eff_mqtt",
+    "type": "mqtt in",
+    "z": "d54aff3e6a0e6e69",
+    "name": "A26 Efficiency MQTT",
+    "topic": "v1/DPCQ01/RO/A26/Telemetry/efficiency",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "",
+    "nl": false,
+    "x": 120,
+    "y": 1460,
+    "wires": [
+      [
+        "n_eri_a26_eff_fn"
+      ]
+    ]
+  },
+  {
+    "id": "n_eri_a26_eff_fn",
+    "type": "function",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Parse A26 Efficiency",
+    "func": "msg.payload = { assetCode: 'A26', signal: 'efficiency', value: msg.payload.value, unit: msg.payload.unit, ts: msg.payload.ts };\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+    "outputs": 1,
+    "x": 340,
+    "y": 1460,
+    "wires": [
+      [
+        "n_eri_a26_eff_http",
+        "n_eri_a26_eff_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "n_eri_a26_eff_http",
+    "type": "http request",
+    "z": "d54aff3e6a0e6e69",
+    "name": "POST A26 Efficiency",
+    "method": "POST",
+    "url": "http://localhost:3000/api/assets/metrics",
+    "ret": "obj",
+    "x": 560,
+    "y": 1460,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n_eri_a26_eff_dbg",
+    "type": "debug",
+    "z": "d54aff3e6a0e6e69",
+    "name": "Debug A26 Efficiency",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "x": 560,
+    "y": 1510,
+    "wires": []
+  }
+]
