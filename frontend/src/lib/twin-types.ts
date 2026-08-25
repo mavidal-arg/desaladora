@@ -115,3 +115,94 @@ export type TwinSummary = {
   cip: TwinCip;
   thresholds: typeof TWIN_THRESHOLDS;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ULTRAFILTRACIÓN — ciclo de CEB
+//
+// La UF no se regenera con CIP: se regenera con CEB (Chemically Enhanced
+// Backwash), un retrolavado al que se le inyecta químico en línea, en cada skid.
+// [cita] ADV-129-00-DGM-PL-002_Rev0, NOTA 5: "La inyección de químicos CEB UF
+// son a cada skid de UF." Equipos: bomba A19 + estanque de retrolavado BW/CEB de
+// 283 m³. Reactivos de clase B (dosificación periódica): hipoclorito de sodio,
+// hidróxido de sodio y ácido sulfúrico.
+//
+// La planta TAMBIÉN tiene instalado un CIP de recuperación para la UF (estanque
+// A21 de 13 m³ + bombas A22, clase C), pero esta versión de la app NO lo modela:
+// la UF se opera con CEB. Queda como instalación existente en el catálogo.
+//
+// Variable de estado del ciclo: la PERMEABILIDAD K = flux / TMP (LMH/bar). Cae
+// mientras el skid filtra y el CEB la recupera — de ahí el diente de sierra.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Umbral que dispara el CEB, espejo de TWIN_THRESHOLDS.rfRisePct para RO.
+ *
+ * [inferencia] Los planos ADV son diagramas de flujo y balance de masas, no
+ * filosofía de operación: NO traen períodos de ciclo ni umbrales de disparo.
+ * Estos valores son un supuesto razonable, declarado en la propia UI, pendiente
+ * de validar con Aguas del Valle antes de congelarlo.
+ */
+export const CEB_THRESHOLDS = {
+  permDropPct: 15, // permeabilidad 15% bajo la base (membrana limpia) → CEB
+  tmpRisePct: 20,  // TMP +20% sobre la base → alerta de ensuciamiento
+  /** Horas de filtración por debajo de las cuales el ciclo se considera anormalmente corto. */
+  shortCycleH: 6,
+} as const;
+
+/** Régimen en el que está un skid de UF. El CIP de UF no se modela en esta versión. */
+export type UfRegime = "ceb" | "preservacion";
+
+export const UF_REGIME_LABELS: Record<UfRegime, string> = {
+  ceb: "CEB",
+  preservacion: "Preservación",
+};
+
+/** Fila por skid de ultrafiltración para la vista del gemelo. */
+export type UfSkidRow = {
+  code: string; // A12-1
+  name: string;
+  status: string; // running / maintenance / ...
+  regime: UfRegime;
+  health: number;        // salud 0-100 derivada de la caída de permeabilidad
+  k: number | null;     // permeabilidad K = flux/TMP (LMH/bar), sin normalizar por temperatura
+  kBase: number | null; // permeabilidad de membrana recién retrolavada (base del ciclo)
+  tmp: number | null;    // presión transmembrana (bar)
+  flux: number | null;   // flux (LMH)
+  turbidity: number | null; // turbidez de salida (NTU)
+  cebHours: number | null;  // HORAS hasta el próximo CEB — el ciclo de UF es de horas, no de días
+  cebCycles: number;        // ciclos de CEB ejecutados en la ventana
+  lastCebAt: string | null; // ISO del último retrolavado
+  trend: "stable" | "rising" | "critical";
+};
+
+/**
+ * Punto de la serie de permeabilidad — el diente de sierra del ciclo de CEB.
+ * A diferencia de la serie de RO (diaria, ciclo de CIP de semanas), ésta es
+ * HORARIA: un ciclo de CEB dura horas y a resolución diaria no se vería.
+ */
+export type UfTrendPoint = {
+  t: string; // "DD HH:mm"
+  k: number;
+  tmp: number;
+  flux: number;
+  /** true si en esa hora se ejecutó un CEB (marca el salto de recuperación). */
+  ceb: boolean;
+};
+
+/** Próximo CEB proyectado + último ejecutado. */
+export type UfCeb = {
+  nextSkidCode: string | null;
+  hours: number | null; // horas al umbral del skid más próximo
+  trigger: "perm_threshold" | "tmp_threshold" | null;
+  lastEvent: { at: string; skidCode: string; kBefore: number; kAfter: number; chemical: string } | null;
+  /** Ciclo medio de filtración entre retrolavados, en horas (todos los skids). */
+  avgCycleH: number | null;
+};
+
+/** Retorno de getUfSummary() — lo que renderiza la pestaña Ultrafiltración de /twin. */
+export type UfSummary = {
+  skids: UfSkidRow[];
+  trend: UfTrendPoint[]; // serie del skid líder
+  ceb: UfCeb;
+  thresholds: typeof CEB_THRESHOLDS;
+};

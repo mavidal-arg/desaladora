@@ -104,10 +104,13 @@ export function ProduccionClient({ summary, membranes }: { summary: DesalSummary
                 </div>
               );
             } },
+            { key: "regime", header: "Régimen", sortAccessor: (m) => m.regime, render: (m) => (
+              <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{m.regime}</span>
+            ) },
             { key: "status", header: "Estado", sortAccessor: (m) => m.status, render: (m) => <StateBadge state={m.status} /> },
           ]}
         />
-        <p className="mt-2 text-[11px] text-muted-foreground">La salud combina ensuciamiento (ΔP transmembrana), caída de rechazo y horas de operación; el <Link href="/twin" className="text-[var(--accent)] hover:underline">Gemelo Digital</Link> la calcula con el modelo físico (Rf normalizado, SEC, β) y proyecta los días hasta el próximo CIP.</p>
+        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">La salud combina ensuciamiento (ΔP transmembrana), caída de rechazo y horas de operación; el <Link href="/twin" className="text-[var(--accent)] hover:underline">Gemelo Digital</Link> la calcula con el modelo físico (Rf normalizado, SEC, β). El <strong>régimen de regeneración no es el mismo</strong> para las dos familias: los trenes de ósmosis inversa van a <strong>CIP</strong> (limpieza química recirculada, estanque A28) con proyección en días, y los skids de ultrafiltración van a <strong>CEB</strong> (retrolavado con reactivo en línea, bomba A19) con proyección en horas.</p>
       </div>
     </div>
   );

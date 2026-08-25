@@ -240,6 +240,9 @@ async function main() {
   // ─── Gemelo Digital — señales virtuales (fouling → CIP) por rack RO ───
   const twinAgg = await seedTwin();
 
+  // ─── Ultrafiltración — ciclo de CEB (retrolavado químico) por skid UF ───
+  await seedUf();
+
   // ─── Proceso Desal — registro de producción (rollup 60 días) ───
   await seedDesal(twinAgg);
 
@@ -264,23 +267,33 @@ async function seedOee() {
 
   const hm = (d: number, h: number) => new Date(day(d).getTime() + h * 3600000);
   // Paradas: causa raíz distribuida para un Pareto legible; A25-3 arrastra OEE.
+  //
+  // Cada parada lleva su SUB-CAUSA (el modo de falla concreto del catálogo
+  // DOWNTIME_SUBCAUSES). La categoría dice dónde mirar; la sub-causa dice qué se
+  // arregló. Es lo que el Pareto muestra al abrir una columna.
+  //
+  // La columna "Proceso" cubre los tres modos de falla típicos de una desaladora
+  // por ósmosis inversa — fouling, scaling y biofouling — porque son los que hay
+  // que poder explicar frente al gráfico.
   const downtime = [
-    { id: "dt01", trainCode: "A25-3", type: "no_planificada", cause: "proceso", d: -11, h: 3, dur: 900, desc: "Baja de recovery por incremento de SDI en alimentación", validated: true, by: "Carlos Ferreyra" },
-    { id: "dt02", trainCode: "A25-2", type: "no_planificada", cause: "electrica", d: -9, h: 22, dur: 420, desc: "Disparo VDF bomba alta presión, reset y arranque", validated: true, by: "Ana Duarte" },
-    { id: "dt03", trainCode: "A25-1", type: "no_planificada", cause: "mecanica", d: -7, h: 10, dur: 240, desc: "Fuga en acople de tren, ajuste de sello", validated: true, by: "Carlos Ferreyra" },
-    { id: "dt04", trainCode: "A25-4", type: "no_planificada", cause: "instrumentacion", d: -6, h: 14, dur: 180, desc: "Falla transmisor de conductividad permeado", validated: true, by: "Ana Duarte" },
-    { id: "dt05", trainCode: "A25-3", type: "no_planificada", cause: "mecanica", d: -5, h: 8, dur: 300, desc: "Vibración en bomba booster, alineación", validated: false, by: "Carlos Ferreyra" },
-    { id: "dt06", trainCode: "A25-2", type: "no_planificada", cause: "externa", d: -4, h: 2, dur: 150, desc: "Corte externo de suministro eléctrico", validated: true, by: "Ana Duarte" },
-    { id: "dt07", trainCode: "A25-1", type: "no_planificada", cause: "proceso", d: -3, h: 16, dur: 210, desc: "Alto ΔP por ensuciamiento, purga y reinicio", validated: false, by: "Carlos Ferreyra" },
-    { id: "dt08", trainCode: "A25-4", type: "no_planificada", cause: "electrica", d: -2, h: 5, dur: 120, desc: "Falla contactor, reemplazo", validated: false, by: "Ana Duarte" },
+    { id: "dt01", trainCode: "A25-3", type: "no_planificada", cause: "proceso", sub: "pretratamiento", d: -11, h: 3, dur: 900, desc: "Baja de recovery por incremento de SDI en alimentación", validated: true, by: "Carlos Ferreyra" },
+    { id: "dt02", trainCode: "A25-2", type: "no_planificada", cause: "electrica", sub: "vdf_disparo", d: -9, h: 22, dur: 420, desc: "Disparo VDF bomba alta presión, reset y arranque", validated: true, by: "Ana Duarte" },
+    { id: "dt03", trainCode: "A25-1", type: "no_planificada", cause: "mecanica", sub: "sello_hpp", d: -7, h: 10, dur: 240, desc: "Fuga en acople de tren, ajuste de sello", validated: true, by: "Carlos Ferreyra" },
+    { id: "dt04", trainCode: "A25-4", type: "no_planificada", cause: "instrumentacion", sub: "transmisor", d: -6, h: 14, dur: 180, desc: "Falla transmisor de conductividad permeado", validated: true, by: "Ana Duarte" },
+    { id: "dt05", trainCode: "A25-3", type: "no_planificada", cause: "mecanica", sub: "rodamiento", d: -5, h: 8, dur: 300, desc: "Vibración en bomba booster, alineación", validated: false, by: "Carlos Ferreyra" },
+    { id: "dt06", trainCode: "A25-2", type: "no_planificada", cause: "externa", sub: "corte_red", d: -4, h: 2, dur: 150, desc: "Corte externo de suministro eléctrico", validated: true, by: "Ana Duarte" },
+    { id: "dt07", trainCode: "A25-1", type: "no_planificada", cause: "proceso", sub: "fouling", d: -3, h: 16, dur: 210, desc: "Alto ΔP por ensuciamiento, purga y reinicio", validated: false, by: "Carlos Ferreyra" },
+    { id: "dt08", trainCode: "A25-4", type: "no_planificada", cause: "electrica", sub: "contactor", d: -2, h: 5, dur: 120, desc: "Falla contactor, reemplazo", validated: false, by: "Ana Duarte" },
+    { id: "dt11", trainCode: "A25-2", type: "no_planificada", cause: "proceso", sub: "scaling", d: -10, h: 6, dur: 360, desc: "Caída de flujo con presión al alza: incrustación por dosis baja de antiincrustante", validated: true, by: "Carlos Ferreyra" },
+    { id: "dt12", trainCode: "A25-3", type: "no_planificada", cause: "proceso", sub: "biofouling", d: -7, h: 20, dur: 270, desc: "ΔP de alimentación y SEC al alza por biopelícula tras decloración deficiente", validated: true, by: "Ana Duarte" },
     // Planificadas (no penalizan disponibilidad, reducen tiempo planificado)
-    { id: "dt09", trainCode: "A25-1", type: "planificada", cause: "mecanica", d: -8, h: 9, dur: 480, desc: "CIP programado tren RO-1", validated: true, by: "María Sosa" },
-    { id: "dt10", trainCode: "A25-3", type: "planificada", cause: "proceso", d: -6, h: 9, dur: 420, desc: "Inspección y muestreo membranas", validated: true, by: "María Sosa" },
+    { id: "dt09", trainCode: "A25-1", type: "planificada", cause: "proceso", sub: "cip_programado", d: -8, h: 9, dur: 480, desc: "CIP programado tren RO-1", validated: true, by: "María Sosa" },
+    { id: "dt10", trainCode: "A25-3", type: "planificada", cause: "proceso", sub: "inspeccion_programada", d: -6, h: 9, dur: 420, desc: "Inspección y muestreo membranas", validated: true, by: "María Sosa" },
   ];
   for (const x of downtime) {
     const start = hm(x.d, x.h);
     const end = new Date(start.getTime() + x.dur * 60000);
-    const data = { trainCode: x.trainCode, type: x.type, cause: x.cause, startTime: start, endTime: end, durationMin: x.dur, description: x.desc, validated: x.validated, validatedBy: x.validated ? x.by : null, createdBy: x.by, shiftId: x.h >= 7 && x.h < 19 ? "shift_dia" : "shift_noche" };
+    const data = { trainCode: x.trainCode, type: x.type, cause: x.cause, subCause: x.sub, startTime: start, endTime: end, durationMin: x.dur, description: x.desc, validated: x.validated, validatedBy: x.validated ? x.by : null, createdBy: x.by, shiftId: x.h >= 7 && x.h < 19 ? "shift_dia" : "shift_noche" };
     await prisma.downtimeEvent.upsert({ where: { id: x.id }, update: data, create: { id: x.id, ...data } });
   }
 
@@ -466,6 +479,112 @@ async function seedTwin(): Promise<Map<number, { rfAvg: number; secComputed: num
 
   console.log(`  Twin: ${readingN} lecturas virtuales (7 señales × ${TWIN_RACKS.length} racks × ${TWIN_DAYS} días), ${cipN} eventos CIP.`);
   return agg;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ULTRAFILTRACIÓN — narrativa de ensuciamiento → CEB → recuperación.
+//
+// El equivalente de seedTwin(), pero para el OTRO régimen de regeneración. Dos
+// diferencias de fondo, y las dos son de proceso, no de código:
+//
+//  1. La UF no se limpia con CIP sino con CEB (Chemically Enhanced Backwash):
+//     retrolavado con reactivo inyectado en línea a cada skid.
+//     [cita] ADV-129-00-DGM-PL-002_Rev0 NOTA 5. Bomba A19 + estanque BW/CEB
+//     283 m³; reactivos clase B: NaOCl, NaOH, H2SO4.
+//  2. El ciclo dura HORAS, no semanas. Por eso esta serie es HORARIA mientras la
+//     de los racks RO es diaria: a un punto por día el diente de sierra del CEB
+//     no se vería. Es la diferencia que el panel tiene que dejar ver.
+//
+// Modelo: la UF opera a FLUX CONSTANTE (así se opera de verdad), así que lo que
+// sube durante el ciclo es la TMP, y la permeabilidad K = flux/TMP cae. Al llegar
+// al umbral se ejecuta el CEB, la TMP vuelve a la base y K se recupera.
+//
+// [inferencia] Los planos ADV son diagramas de flujo y balance de masas: no traen
+// períodos de ciclo ni umbrales de disparo. La duración del ciclo y la subida de
+// TMP son supuestos de demo, pendientes de validar con Aguas del Valle.
+// ─────────────────────────────────────────────────────────────────────────────
+const UF_HOURS = 168; // 7 días de serie horaria
+const UF_TMP_RISE = 0.2; // +20 % de TMP a lo largo del ciclo ⇒ K cae ~16,7 %
+
+// Cada skid en distinta fase del ciclo, para que el panel muestre variedad:
+//   A12-1: ciclo largo, recién retrolavado — holgado
+//   A12-2: ciclo medio, a mitad de camino
+//   A12-3: ciclo corto y avanzado — el próximo CEB (coincide con su health 64)
+const UF_SKIDS = [
+  { code: "A12-1", cycleH: 14, tau0: 3, fluxBase: 57, tmpBase: 0.52, turbBase: 0.06, chemical: "NaOCl" },
+  { code: "A12-2", cycleH: 12, tau0: 7, fluxBase: 55, tmpBase: 0.58, turbBase: 0.08, chemical: "NaOH" },
+  { code: "A12-3", cycleH: 9, tau0: 8, fluxBase: 53, tmpBase: 0.64, turbBase: 0.11, chemical: "H2SO4" },
+] as const;
+
+type UfSkidCfg = (typeof UF_SKIDS)[number];
+
+/** Edad del ciclo (horas desde el último CEB) en la hora h. h = UF_HOURS-1 es AHORA. */
+function ufAge(cfg: UfSkidCfg, h: number): number {
+  return (((h - (UF_HOURS - 1) + cfg.tau0) % cfg.cycleH) + cfg.cycleH) % cfg.cycleH;
+}
+
+/** Estado del skid en la hora h: flux ~constante, TMP creciente, turbidez estable. */
+function ufHour(cfg: UfSkidCfg, h: number) {
+  const age = ufAge(cfg, h);
+  const frac = age / (cfg.cycleH - 1); // 0 (recién retrolavado) → 1 (umbral de CEB)
+  const jitter = (v: number, seed: number, amp: number) => v * (1 + amp * (rnd(seed) - 0.5));
+  const flux = jitter(cfg.fluxBase, hashInt(cfg.code) + h * 3, 0.03); // operación a flux constante
+  const tmp = jitter(cfg.tmpBase * (1 + UF_TMP_RISE * Math.pow(frac, 1.15)), hashInt(cfg.code) + h * 11, 0.02);
+  const turbidity = jitter(cfg.turbBase * (1 + 0.25 * frac), hashInt(cfg.code) + h * 17, 0.15);
+  return { age, frac, flux, tmp, turbidity };
+}
+
+async function seedUf() {
+  const signalUnits: Record<string, string> = { flux: "LMH", tmp: "bar", turbidity: "NTU" };
+  let readingN = 0;
+  let cebN = 0;
+
+  for (const cfg of UF_SKIDS) {
+    const id = eqId(cfg.code); // A12-1 → eq_a121
+    const sigIds: string[] = [];
+    for (const [signal, unit] of Object.entries(signalUnits)) {
+      const sigId = `sig_${id}_${signal}`; // mismo esquema que el loop genérico de equipos
+      sigIds.push(sigId);
+      await prisma.piSignal.upsert({
+        where: { id: sigId },
+        update: { unit },
+        create: { id: sigId, equipmentId: id, signal, unit },
+      });
+    }
+    // El loop genérico ya sembró 14 lecturas DIARIAS de estas mismas señales.
+    // Mezclarlas con la serie horaria daría una cadencia inconsistente, así que
+    // se limpian antes de escribir.
+    await prisma.piReading.deleteMany({ where: { signalId: { in: sigIds } } });
+
+    const rows: { id: string; signalId: string; ts: Date; value: number; quality: string }[] = [];
+    for (let h = 0; h < UF_HOURS; h++) {
+      const d = ufHour(cfg, h);
+      const ts = new Date(NOW.getTime() - (UF_HOURS - 1 - h) * 3_600_000);
+      for (const [signal, value] of Object.entries({ flux: round2(d.flux), tmp: round3(d.tmp), turbidity: round3(d.turbidity) })) {
+        rows.push({ id: `sig_${id}_${signal}_h${h}`, signalId: `sig_${id}_${signal}`, ts, value, quality: "good" });
+        readingN++;
+      }
+      // CEB al inicio de cada ciclo (age == 0): la TMP cae a la base y K se recupera.
+      if (h > 0 && d.age === 0) {
+        const kBefore = (cfg.fluxBase / (cfg.tmpBase * (1 + UF_TMP_RISE)));
+        const kAfter = cfg.fluxBase / cfg.tmpBase;
+        const cebId = `ceb_${id}_h${h}`;
+        await prisma.cebEvent.upsert({
+          where: { id: cebId },
+          update: { kBefore: round2(kBefore), kAfter: round2(kAfter) },
+          create: {
+            id: cebId, day: ts, skidCode: cfg.code,
+            kBefore: round2(kBefore), kAfter: round2(kAfter),
+            chemical: cfg.chemical, trigger: "perm_threshold",
+          },
+        });
+        cebN++;
+      }
+    }
+    await prisma.piReading.createMany({ data: rows, skipDuplicates: true });
+  }
+
+  console.log(`  UF: ${readingN} lecturas horarias (3 señales × ${UF_SKIDS.length} skids × ${UF_HOURS} h), ${cebN} eventos CEB.`);
 }
 
 async function seedDesal(twinAgg?: Map<number, { rfAvg: number; secComputed: number; tmpAvg: number; cipDays: number }>) {

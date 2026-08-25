@@ -30,13 +30,16 @@ export const SIGNAL_LABELS: Record<string, SignalLabel> = {
     desc: "Sólidos disueltos totales en el permeado (mg/l); su aumento refleja menor rechazo de sales / calidad de agua producto.",
   },
   // ── Membranas UF ──
+  // Ojo: la clave `tmp` la comparten los skids de UF (~0,6 bar) y el gemelo de
+  // los trenes RO (~54 bar). La descripción vale para ambos, pero el régimen de
+  // limpieza que anticipa NO es el mismo: en UF dispara un CEB, en RO un CIP.
   tmp: {
     label: "Presión transmembrana (TMP)",
-    desc: "Presión neta a través de la membrana de ultrafiltración; su aumento refleja ensuciamiento del módulo.",
+    desc: "Presión neta a través de la membrana; su aumento refleja ensuciamiento. En ultrafiltración anticipa el próximo CEB (retrolavado químico, ciclo de horas); en ósmosis inversa, el próximo CIP (ciclo de semanas).",
   },
   flux: {
     label: "Flux",
-    desc: "Caudal de permeado por unidad de área de membrana (LMH); su caída indica pérdida de permeabilidad por ensuciamiento.",
+    desc: "Caudal de permeado por unidad de área de membrana (LMH). La UF opera a flux constante, así que lo que se mueve es la TMP: la permeabilidad (flux / TMP) cae hasta que el CEB la recupera.",
   },
   turbidity: {
     label: "Turbidez de salida",

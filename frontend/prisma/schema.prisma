@@ -253,6 +253,31 @@ model CipEvent {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Ultrafiltración — evento de CEB (Chemically Enhanced Backwash) por skid UF.
+// El equivalente de CipEvent, pero para el OTRO régimen de regeneración: la UF
+// no se limpia con CIP sino con retrolavado químicamente asistido, inyectando
+// reactivo en línea a cada skid (ADV-129-00-DGM-PL-002 NOTA 5; bomba A19 +
+// estanque BW/CEB 283 m³). Cada cruce del umbral de permeabilidad genera un
+// CebEvent y la serie del skid vuelve a subir (recuperación post-retrolavado).
+//
+// La planta tiene además un CIP de recuperación para UF (estanque A21) que esta
+// versión no modela — si se agrega, entra acá como un campo `kind`.
+// ─────────────────────────────────────────────────────────────────────────────
+model CebEvent {
+  id        String   @id @default(cuid())
+  day       DateTime
+  skidCode  String // A12-1..3
+  kBefore   Float // permeabilidad K20 antes del CEB (LMH/bar)
+  kAfter    Float // permeabilidad K20 después del CEB
+  chemical  String // "NaOCl" | "NaOH" | "H2SO4" — reactivos clase B del plano
+  trigger   String // "perm_threshold" | "tmp_threshold" | "scheduled"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([skidCode, day])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // OEE / Eficiencia RO — módulo de producción portado del análisis EQR-APP1.
 // Trenes RO = racks A25-x (Equipment category="Membranes"). No se crean equipos:
 // estos modelos referencian el rack por su `code` (trainCode), respetando el
@@ -279,6 +304,10 @@ model DowntimeEvent {
   trainCode   String    // A25-1..4
   type        String    // planificada | no_planificada
   cause       String    // mecanica | electrica | instrumentacion | proceso | externa
+  // Causa raíz concreta dentro de la categoría (DOWNTIME_SUBCAUSES en oee-types).
+  // La categoría dice DÓNDE mirar; la sub-causa dice QUÉ arreglar. Nullable: las
+  // paradas cargadas antes de este campo quedan como "Sin clasificar".
+  subCause    String?   // fouling | scaling | biofouling | sello_hpp | vdf_disparo | ...
   startTime   DateTime
   endTime     DateTime?
   durationMin Int?      // minutos (null = parada en curso)

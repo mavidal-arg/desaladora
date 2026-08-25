@@ -26,6 +26,47 @@ function Kpi({ label, value, unit, hint, accent }: { label: string; value: strin
   );
 }
 
+/** Tabla de salud de un grupo de membranas, con su régimen de regeneración. */
+function MembraneCard({ title, rows, nota }: { title: string; rows: MembraneRow[]; nota: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold">{title}</span>
+        <Link href="/twin" className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--foreground)]">
+          <Atom className="h-3.5 w-3.5 text-[var(--accent)]" /> Gemelo Digital <ArrowUpRight className="h-3 w-3" />
+        </Link>
+      </div>
+      <SortableTable
+        rows={rows}
+        getRowKey={(m) => m.code}
+        minWidth={420}
+        initialSort={{ key: "health", dir: "asc" }}
+        emptyText="Sin equipos en este régimen."
+        columns={[
+          { key: "code", header: "Código", sortAccessor: (m) => m.code, render: (m) => <span className="font-mono font-semibold">{m.code}</span> },
+          { key: "name", header: "Equipo", sortAccessor: (m) => m.name, render: (m) => m.name },
+          { key: "regime", header: "Régimen", sortAccessor: (m) => m.regime, render: (m) => (
+            <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{m.regime}</span>
+          ) },
+          { key: "health", header: "Salud", sortAccessor: (m) => m.health, render: (m) => {
+            const c = m.health >= 85 ? statusColor("en_rango") : m.health >= 72 ? statusColor("fuera_rango") : statusColor("falla");
+            return (
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+                  <div className={cn("h-full rounded-full", c.dot)} style={{ width: `${m.health}%` }} />
+                </div>
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{m.health}%</span>
+              </div>
+            );
+          } },
+          { key: "status", header: "Estado", sortAccessor: (m) => m.status, render: (m) => <StateBadge state={m.status} /> },
+        ]}
+      />
+      <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{nota}</p>
+    </div>
+  );
+}
+
 export function PanelPrincipalClient({
   role, oee, downtime, quality, shifts, alerts, rules, productionTrend, desal, membranes,
 }: {
@@ -67,40 +108,23 @@ export function PanelPrincipalClient({
         productionTrend={productionTrend}
       />
 
-      {/* Salud de membranas (UF / RO) — tabla reubicada al pie desde Producción de Agua */}
-      <div className="px-4 pb-6 sm:px-6">
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold">Salud de membranas (UF / Ósmosis Inversa)</span>
-            <Link href="/twin" className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--foreground)]">
-              <Atom className="h-3.5 w-3.5 text-[var(--accent)]" /> Gemelo Digital <ArrowUpRight className="h-3 w-3" />
-            </Link>
-          </div>
-          <SortableTable
-            rows={membranes}
-            getRowKey={(m) => m.code}
-            minWidth={560}
-            initialSort={{ key: "health", dir: "asc" }}
-            columns={[
-              { key: "code", header: "Código", sortAccessor: (m) => m.code, render: (m) => <span className="font-mono font-semibold">{m.code}</span> },
-              { key: "name", header: "Tren", sortAccessor: (m) => m.name, render: (m) => m.name },
-              { key: "kind", header: "Tipo", sortAccessor: (m) => m.kind, render: (m) => <span className="text-muted-foreground">{m.kind}</span> },
-              { key: "health", header: "Salud", sortAccessor: (m) => m.health, render: (m) => {
-                const c = m.health >= 85 ? statusColor("en_rango") : m.health >= 72 ? statusColor("fuera_rango") : statusColor("falla");
-                return (
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-                      <div className={cn("h-full rounded-full", c.dot)} style={{ width: `${m.health}%` }} />
-                    </div>
-                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{m.health}%</span>
-                  </div>
-                );
-              } },
-              { key: "status", header: "Estado", sortAccessor: (m) => m.status, render: (m) => <StateBadge state={m.status} /> },
-            ]}
-          />
-          <p className="mt-2 text-[11px] text-muted-foreground">La salud combina ensuciamiento (ΔP transmembrana), caída de rechazo y horas de operación; el <Link href="/twin" className="text-[var(--accent)] hover:underline">Gemelo Digital</Link> la calcula con el modelo físico (Rf normalizado, SEC, β) y proyecta los días hasta el próximo CIP.</p>
-        </div>
+      {/* Salud de membranas — partida por RÉGIMEN de regeneración.
+          Antes era una sola tabla "UF / Ósmosis Inversa" con una nota al pie que
+          le prometía a TODAS las filas una proyección de "días hasta el próximo
+          CIP". Los skids de ultrafiltración no van a CIP: van a CEB. Mezclarlos
+          bajo la misma promesa no era un problema de redacción, era atribuirle a
+          un equipo un proceso que no corre. */}
+      <div className="grid gap-4 px-4 pb-6 sm:px-6 lg:grid-cols-2">
+        <MembraneCard
+          title="Ósmosis Inversa — régimen CIP"
+          rows={membranes.filter((m) => m.regime === "CIP")}
+          nota={<>La salud combina ensuciamiento (ΔP transmembrana), caída de rechazo y horas de operación; el <Link href="/twin" className="text-[var(--accent)] hover:underline">Gemelo Digital</Link> la calcula con el modelo físico (Rf normalizado, SEC, β) y proyecta los <strong>días hasta el próximo CIP</strong> — limpieza química recirculada desde el estanque A28.</>}
+        />
+        <MembraneCard
+          title="Ultrafiltración — régimen CEB"
+          rows={membranes.filter((m) => m.regime === "CEB")}
+          nota={<>La UF no se regenera con CIP sino con <strong>CEB</strong> (retrolavado con reactivo inyectado en línea a cada skid, bomba A19 + estanque BW/CEB de 283 m³). Su indicador de ciclo es la permeabilidad (flux / TMP), y el <Link href="/twin" className="text-[var(--accent)] hover:underline">Gemelo Digital</Link> proyecta las <strong>horas hasta el próximo CEB</strong> — un ciclo de horas, no de semanas.</>}
+        />
       </div>
     </div>
   );

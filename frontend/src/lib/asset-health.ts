@@ -26,6 +26,14 @@ import {
 
 export type MembraneRow = {
   code: string; name: string; kind: string; health: number; status: string; criticality: string;
+  /**
+   * Régimen de regeneración del equipo. NO son intercambiables: los trenes de
+   * ósmosis inversa se limpian con CIP (limpieza química recirculada, estanque
+   * A28) y la ultrafiltración con CEB (retrolavado químicamente asistido, bomba
+   * A19 + estanque BW/CEB de 283 m³). Proyectarle "días para CIP" a un skid de
+   * UF es atribuirle un proceso que no corre.
+   */
+  regime: "CIP" | "CEB";
 };
 
 /** Mapa code → salud (0-100) de los racks RO, derivada del Rf normalizado. */
@@ -68,16 +76,28 @@ export function plantHealth(health: Map<string, number>): number {
   return Math.round((total / health.size) * 10) / 10;
 }
 
-/** Membranas (UF + racks RO) con su salud ya resuelta por la política única. */
+/**
+ * ¿Es un tren de ósmosis inversa? Mismo criterio que `isRO` en PredictiveClient:
+ * el área manda, y el prefijo de código es el respaldo. La tabla `Equipment` no
+ * tiene columna `kind` — sólo vive en plant-config — así que server-side se
+ * discrimina por código.
+ */
+export const isRoCode = (code: string) => /^A25/i.test(code);
+
+/** Membranas (UF + racks RO) con su salud y su régimen de regeneración. */
 export async function getMembranes(): Promise<MembraneRow[]> {
   const [rows, health] = await Promise.all([
     prisma.equipment.findMany({ where: { category: "Membranes" }, orderBy: { code: "asc" } }),
     getAssetHealth(),
   ]);
-  return rows.map((e) => ({
-    code: e.code, name: e.name,
-    kind: e.code.startsWith("A25") ? "Ósmosis Inversa" : "Ultrafiltración",
-    health: health.get(e.code) ?? Math.round(e.healthIndex),
-    status: e.status, criticality: e.criticality,
-  }));
+  return rows.map((e) => {
+    const ro = isRoCode(e.code);
+    return {
+      code: e.code, name: e.name,
+      kind: ro ? "Ósmosis Inversa" : "Ultrafiltración",
+      health: health.get(e.code) ?? Math.round(e.healthIndex),
+      status: e.status, criticality: e.criticality,
+      regime: (ro ? "CIP" : "CEB") as "CIP" | "CEB",
+    };
+  });
 }

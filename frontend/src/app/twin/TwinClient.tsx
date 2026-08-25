@@ -14,7 +14,8 @@ import { PLANT } from "@/lib/plant-config";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { statusColor, CHART, CATEGORY_PALETTE } from "@/lib/status-colors";
 import { cn, apiUrl } from "@/lib/utils";
-import type { TwinSummary, TwinRackRow } from "@/lib/twin-types";
+import { UfCebPanel } from "@/components/twin/UfCebPanel";
+import type { TwinSummary, TwinRackRow, UfSummary } from "@/lib/twin-types";
 
 const ACCENT = "var(--accent)";
 // Largo del buffer rodante de la física viva (nº de muestras a ~2,5 s).
@@ -166,11 +167,20 @@ function Model3DTab({ racks }: { racks: TwinRackRow[] }) {
   );
 }
 
-export function TwinClient({ data }: { data: TwinSummary }) {
+/**
+ * Las pestañas del gemelo se organizan por RÉGIMEN DE REGENERACIÓN, que es la
+ * distinción de proceso que la app tenía difuminada: los trenes de ósmosis
+ * inversa se limpian con CIP (ciclo de semanas) y los skids de ultrafiltración
+ * con CEB (ciclo de horas). El "Modelo 3D" es la vista espacial del área RO.
+ */
+const TWIN_TABS = ["Ósmosis Inversa — CIP", "Ultrafiltración — CEB", "Modelo 3D"] as const;
+type TwinTab = (typeof TWIN_TABS)[number];
+
+export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
   const { racks, idealVsReal, cip, thresholds } = data;
   const [spcMetric, setSpcMetric] = useState<"rf" | "tmp">("rf");
   const [secMode, setSecMode] = useState<"agg" | "trains">("agg");
-  const [tab, setTab] = useState<"Modelo Físico" | "Modelo 3D">("Modelo Físico");
+  const [tab, setTab] = useState<TwinTab>("Ósmosis Inversa — CIP");
 
   const rackCodes = racks.map((r) => r.code);
   const [spcTrain, setSpcTrain] = useState<string>(() => cip.nextTrainCode ?? rackCodes[0] ?? "");
@@ -179,8 +189,9 @@ export function TwinClient({ data }: { data: TwinSummary }) {
   const [compareOpen, setCompareOpen] = useState(false);
 
   // ── Física viva (useTwinLive, ~2,5 s) + buffer rodante para animar SEC/SPC ──
-  // Sólo corre el intervalo en la pestaña "Modelo Físico".
-  const liveMap = useTwinLive(PLANT.equipment, 2500, tab === "Modelo Físico");
+  // Sólo corre el intervalo en la pestaña de ósmosis inversa: es la única que
+  // consume la física viva de los racks.
+  const liveMap = useTwinLive(PLANT.equipment, 2500, tab === "Ósmosis Inversa — CIP");
   const [buf, setBuf] = useState<{ t: string; live: Record<string, TwinLive> }[]>([]);
   useEffect(() => {
     if (Object.keys(liveMap).length === 0) return;
@@ -263,10 +274,12 @@ export function TwinClient({ data }: { data: TwinSummary }) {
 
   return (
     <div className="px-4 py-5 sm:px-6 lg:px-8">
-      <TabBar tabs={["Modelo Físico", "Modelo 3D"]} active={tab} onChange={(t) => setTab(t as typeof tab)} />
+      <TabBar tabs={[...TWIN_TABS]} active={tab} onChange={(t) => setTab(t as TwinTab)} />
 
       {tab === "Modelo 3D" ? (
         <Model3DTab racks={racks} />
+      ) : tab === "Ultrafiltración — CEB" ? (
+        <UfCebPanel data={uf} />
       ) : (
       <div className="space-y-4">
       {/* ── Tiles físicos del tren líder ── */}

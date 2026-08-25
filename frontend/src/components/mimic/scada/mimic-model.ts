@@ -55,7 +55,7 @@ export const FLUID_LABEL: Record<Fluid, string> = {
   permeate: "Permeado",
   brine: "Salmuera / rechazo",
   chemical: "Químico",
-  cip: "CIP / lavado",
+  cip: "Limpieza química (CIP RO / CEB UF)",
 };
 
 // Colores de fluido (NO semántica de estado; los estados usan la capa SCADA).

@@ -4,11 +4,15 @@ import {
   RO_TRAINS,
   RO_NOMINAL_M3H,
   DOWNTIME_CAUSE_LABELS,
+  SUBCAUSE_BY_CODE,
+  UNCLASSIFIED_SUBCAUSE,
   type DowntimeCause,
+  type DowntimeType,
   type OeeSummary,
   type OeeThresholds,
   type TrainOee,
   type ParetoCause,
+  type ParetoSubCause,
 } from "@/lib/oee-types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,20 +122,75 @@ export async function getOeeSummary(): Promise<OeeSummary> {
   const pP = avg((t) => t.performance);
   const pQ = avg((t) => t.quality);
 
-  // Pareto de paradas por causa raíz (todos los minutos de downtime).
-  const byCause = new Map<DowntimeCause, number>();
+  // ── Pareto de paradas por causa raíz ───────────────────────────────────────
+  //
+  // La barra es la CATEGORÍA; adentro va el desglose por sub-causa, que es lo
+  // que de verdad se ataca. Se separan además los minutos planificados de los no
+  // planificados: el Pareto los suma a todos (a diferencia del pilar de
+  // Disponibilidad, que sólo cuenta los no planificados), y el gráfico deja
+  // conmutar el alcance en el cliente sin volver al servidor.
+  const groups = new Map<DowntimeCause, typeof downtime>();
   for (const d of downtime) {
     const c = d.cause as DowntimeCause;
-    byCause.set(c, (byCause.get(c) ?? 0) + (d.durationMin ?? 0));
+    const g = groups.get(c);
+    if (g) g.push(d);
+    else groups.set(c, [d]);
   }
-  const totalMin = [...byCause.values()].reduce((s, m) => s + m, 0);
+  const minutesOf = (rows: typeof downtime) => rows.reduce((s, d) => s + (d.durationMin ?? 0), 0);
+  const totalMin = minutesOf(downtime);
+
   let cum = 0;
-  const paretoCauses: ParetoCause[] = [...byCause.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([cause, minutes]) => {
+  const paretoCauses: ParetoCause[] = [...groups.entries()]
+    .map(([cause, rows]) => ({ cause, rows, minutes: minutesOf(rows) }))
+    .sort((a, b) => b.minutes - a.minutes)
+    .map(({ cause, rows, minutes }) => {
       const pct = totalMin ? (minutes / totalMin) * 100 : 0;
       cum += pct;
-      return { cause, label: DOWNTIME_CAUSE_LABELS[cause], minutes, pct: r(pct), cumPct: r(cum) };
+
+      // Desglose por sub-causa. Las paradas anteriores al campo caen en un
+      // cubo "sin clasificar" en vez de desaparecer del total.
+      const bySub = new Map<string, { minutes: number; events: number }>();
+      for (const d of rows) {
+        const key = d.subCause ?? UNCLASSIFIED_SUBCAUSE.code;
+        const acc = bySub.get(key) ?? { minutes: 0, events: 0 };
+        acc.minutes += d.durationMin ?? 0;
+        acc.events += 1;
+        bySub.set(key, acc);
+      }
+      const subCauses: ParetoSubCause[] = [...bySub.entries()]
+        .map(([code, v]) => ({
+          code,
+          label: SUBCAUSE_BY_CODE[code]?.label ?? UNCLASSIFIED_SUBCAUSE.label,
+          minutes: v.minutes,
+          events: v.events,
+          pct: minutes ? r((v.minutes / minutes) * 100) : 0,
+        }))
+        .sort((a, b) => b.minutes - a.minutes);
+
+      const planned = rows.filter((d) => d.type === "planificada");
+      return {
+        cause,
+        label: DOWNTIME_CAUSE_LABELS[cause],
+        minutes,
+        pct: r(pct),
+        cumPct: r(cum),
+        events: rows.length,
+        plannedMin: minutesOf(planned),
+        unplannedMin: minutes - minutesOf(planned),
+        subCauses,
+        eventList: rows
+          .slice()
+          .sort((a, b) => b.startTime.getTime() - a.startTime.getTime())
+          .map((d) => ({
+            id: d.id,
+            trainCode: d.trainCode,
+            type: d.type as DowntimeType,
+            subCause: d.subCause,
+            minutes: d.durationMin ?? 0,
+            startTime: d.startTime.toISOString(),
+            description: d.description,
+          })),
+      };
     });
 
   return {
@@ -194,7 +253,7 @@ export async function getTrainProcess(code: string): Promise<TrainProcess> {
 // ── Fetchers serializables para las pestañas del módulo ──────────────────────
 
 export type DowntimeRow = {
-  id: string; trainCode: string; type: string; cause: string;
+  id: string; trainCode: string; type: string; cause: string; subCause: string | null;
   startTime: string; endTime: string | null; durationMin: number | null;
   description: string; validated: boolean; validatedBy: string | null;
   createdBy: string; shiftId: string | null;
@@ -220,7 +279,7 @@ export type AlertRuleRow = {
 export async function listDowntime(): Promise<DowntimeRow[]> {
   const rows = await prisma.downtimeEvent.findMany({ orderBy: { startTime: "desc" }, take: 100 });
   return rows.map((d) => ({
-    id: d.id, trainCode: d.trainCode, type: d.type, cause: d.cause,
+    id: d.id, trainCode: d.trainCode, type: d.type, cause: d.cause, subCause: d.subCause,
     startTime: d.startTime.toISOString(), endTime: d.endTime?.toISOString() ?? null,
     durationMin: d.durationMin, description: d.description, validated: d.validated,
     validatedBy: d.validatedBy, createdBy: d.createdBy, shiftId: d.shiftId,

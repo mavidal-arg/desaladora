@@ -9,6 +9,7 @@ import { OEEGauge, StateBadge } from "@/components/mes";
 import { CHART } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
 import { oeeBand, type OeeSummary } from "@/lib/oee-types";
+import { ParetoCard } from "@/components/oee/ParetoCard";
 
 const ACCENT = "var(--accent)";
 const BAND_HEX = { ok: "#16a34a", warn: "#d97706", crit: "#dc2626" } as const;
@@ -50,7 +51,6 @@ export function OeeDashboard({ summary, productionTrend }: { summary: OeeSummary
   const p = summary.plant;
   const th = summary.thresholds;
   const trainBars = summary.trains.map((t) => ({ code: t.code.replace("A25-", "RO-"), oee: t.oee, band: oeeBand(t.oee, th) }));
-  const pareto = summary.paretoCauses.map((c) => ({ label: c.label, minutes: c.minutes, cumPct: c.cumPct }));
   const loss = [
     { label: "Disponibilidad", value: summary.pillarLoss.availability },
     { label: "Rendimiento", value: summary.pillarLoss.performance },
@@ -162,24 +162,7 @@ export function OeeDashboard({ summary, productionTrend }: { summary: OeeSummary
 
       {/* Pareto + pérdidas por pilar */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
-          <div className="mb-2 text-sm font-semibold">Pareto de paradas por causa raíz</div>
-          {pareto.length ? (
-            <div className="h-[220px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={pareto} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: CHART.axis }} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="l" tick={{ fontSize: 11, fill: CHART.axis }} tickLine={false} axisLine={false} width={44} />
-                  <YAxis yAxisId="r" orientation="right" domain={[0, 100]} tick={{ fontSize: 11, fill: CHART.axis }} tickLine={false} axisLine={false} width={34} unit="%" />
-                  <RTooltip contentStyle={{ background: CHART.tooltipBg, border: `1px solid ${CHART.tooltipBorder}`, borderRadius: 8, fontSize: 12 }} />
-                  <Bar yAxisId="l" dataKey="minutes" name="Minutos" fill={ACCENT} radius={[4, 4, 0, 0]} />
-                  <Line yAxisId="r" type="monotone" dataKey="cumPct" name="Acumulado %" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          ) : <p className="py-8 text-center text-sm text-muted-foreground">Sin paradas registradas en la ventana.</p>}
-        </div>
+        <ParetoCard causes={summary.paretoCauses} windowDays={summary.window.days} />
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-3 text-sm font-semibold">Pérdida de OEE por pilar</div>
           <div className="space-y-3">

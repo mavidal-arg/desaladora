@@ -111,7 +111,7 @@ export const PLANT: PlantConfig = {
   bands: [
     { loop: "water", title: "Línea de Agua", sub: "Mar → pretratamiento → RO → remineralización → agua potable" },
     { loop: "brine", title: "Salmuera", sub: "Rechazo → cámara de carga → emisario submarino" },
-    { loop: "utility", title: "Servicios", sub: "CIP / limpieza química y energía" },
+    { loop: "utility", title: "Servicios", sub: "CIP (RO) / CEB (UF) y energía" },
   ],
 
   areas: [
@@ -127,8 +127,8 @@ export const PLANT: PlantConfig = {
       help: "Almacena el agua potable y la impulsa al sistema de distribución (red norte de Aguas del Valle). Es la salida del proceso." },
     { code: "BRINE", name: "Salmuera / Descarga", short: "Salmuera", criticality: "high", loop: "brine",
       help: "Concentra y descarga la salmuera de rechazo por el emisario submarino con difusor, previa decloración (metabisulfito), cumpliendo la normativa ambiental de descarga." },
-    { code: "CIP", name: "CIP / Limpieza Química", short: "CIP", criticality: "medium", loop: "utility",
-      help: "Limpieza química de membranas UF y RO (según ensuciamiento), retrolavados y neutralización de efluentes antes de su descarga." },
+    { code: "CIP", name: "CIP / CEB — Limpieza Química", short: "CIP/CEB", criticality: "medium", loop: "utility",
+      help: "La planta tiene TRES regímenes de limpieza, y no son intercambiables (ADV-129-00-DGM-PL-002). · CEB de UF: retrolavado con reactivo inyectado en línea a cada skid (bomba A19 + estanque BW/CEB de 283 m³, con NaOCl / NaOH / H₂SO₄) — es el que la app opera para ultrafiltración, y su ciclo es de horas. · CIP de RO: limpieza química recirculada de los trenes de ósmosis inversa (estanque A28 de 115 m³ + rack CIP), con ciclo de semanas. · CIP de UF: limpieza de recuperación de la ultrafiltración (estanque A21 de 13 m³ + bombas A22, alimentado con permeado RO), instalada en la planta pero no modelada en esta versión. Todos los efluentes pasan por el estanque de neutralización antes de su descarga." },
     { code: "ELEC", name: "Servicios Eléctricos", short: "Eléctrico", criticality: "high", loop: "utility",
       help: "Salas eléctricas que alimentan bombas de alta presión y el resto de la planta. La energía es el mayor costo operativo de una desaladora." },
   ],
@@ -170,7 +170,7 @@ export const PLANT: PlantConfig = {
     ...ufskid("A12-2", "Skid Ultrafiltración 2", "running", 78),
     ...ufskid("A12-3", "Skid Ultrafiltración 3", "maintenance", 64),
     ...tk("A14", "Estanque Lavado Prefiltros UF", "UF", "running", 93, "32 m³"),
-    ...dpump("A15", "Bombas BW/CEB Prefiltros UF", "UF", "running", 82, 3.0, 700),
+    ...dpump("A15", "Bombas Pre-filtros UF", "UF", "running", 82, 3.0, 700),
 
     // ── Ósmosis Inversa + ERI ──
     { code: "A17", name: "Mezclador Estático RO", kind: "mixer", areaCode: "RO", category: "Mixers",
@@ -246,7 +246,10 @@ export const PLANT: PlantConfig = {
       signals: [sig("flow", "Caudal descarga", "m³/h", 1590, 80, 0, 1800), sig("pressure", "Presión", "bar", 1.2, 0.2, 0, 3)],
       help: "Descarga la salmuera al mar mediante difusor multipuerto para dilución rápida, cumpliendo los límites ambientales de la RCA." },
 
-    // ── CIP / Limpieza Química ──
+    // ── CIP / CEB — Limpieza Química ──
+    // Los nombres A21/A28 son literales del plano ADV-129-00-DGM-PL-002: se
+    // conservan tal cual aunque la app sólo opere el régimen CEB para la UF.
+    ...dpump("A19", "Bomba BW/CEB Ultrafiltración", "CIP", "running", 88, 3.2, 780),
     ...tk("A28", "Estanque CIP RO", "CIP", "running", 90, "115 m³", [sig("ph", "pH", "", 7, 1, 2, 12)]),
     ...tk("A21", "Estanque CIP UF", "CIP", "running", 90, "13 m³", [sig("ph", "pH", "", 7, 1, 2, 12)]),
     ...tk("NEUT", "Estanque de Neutralización", "CIP", "running", 91, "196 m³", [sig("ph", "pH", "", 7.2, 0.5, 5, 9)]),
@@ -294,7 +297,7 @@ function ufskid(code: string, name: string, status: EquipmentDef["status"], heal
     runtime: 10000 + (health * 173) % 25000, manufacturer: "Inge/Dupont", model: "UF", specs: { fibras: "PVDF" },
     mimic: { x: 0, y: 0 }, primarySignal: "flux",
     signals: [sig("flux", "Flux", "LMH", 55, 4, 30, 80), sig("tmp", "Presión transmembrana", "bar", 0.6, 0.15, 0, 2), sig("turbidity", "Turbidez salida", "NTU", 0.08, 0.03, 0, 0.5)],
-    help: `${name}: módulo de ultrafiltración (membranas de fibra hueca). El flux y la presión transmembrana (TMP) indican el ensuciamiento; turbidez baja = agua apta para RO.` }];
+    help: `${name}: módulo de ultrafiltración (membranas de fibra hueca). El flux y la presión transmembrana (TMP) indican el ensuciamiento; turbidez baja = agua apta para RO. Se regenera con CEB (retrolavado químicamente asistido), NO con CIP: su ciclo es de horas.` }];
 }
 function rorack(code: string, name: string, status: EquipmentDef["status"], health: number): [EquipmentDef] {
   return [{ code, name, kind: "ro_rack", areaCode: "RO", category: "Membranes", criticality: "critical", status, health,

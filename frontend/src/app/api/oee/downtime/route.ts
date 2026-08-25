@@ -3,10 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { listDowntime } from "@/lib/oee";
-import { RO_TRAINS, type DowntimeType, type DowntimeCause } from "@/lib/oee-types";
+import { RO_TRAINS, subCausesOf, type DowntimeType, type DowntimeCause } from "@/lib/oee-types";
 
 const TYPES: DowntimeType[] = ["planificada", "no_planificada"];
 const CAUSES: DowntimeCause[] = ["mecanica", "electrica", "instrumentacion", "proceso", "externa"];
+
+/**
+ * La sub-causa tiene que pertenecer a SU categoría: un "scaling" con causa
+ * "electrica" no es un dato incompleto, es un dato falso — y el Pareto lo
+ * mostraría como si fuera real. Vacío se acepta (queda "sin clasificar").
+ */
+const validSubCause = (cause: DowntimeCause, sub: unknown): boolean =>
+  sub == null || sub === "" || (typeof sub === "string" && subCausesOf(cause).some((x) => x.code === sub));
 
 const durationOf = (start?: string | null, end?: string | null): number | null =>
   start && end ? Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)) : null;
@@ -25,10 +33,12 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => null);
   if (!b || !RO_TRAINS.includes(b.trainCode) || !TYPES.includes(b.type) || !CAUSES.includes(b.cause) || !b.startTime || !b.description)
     return NextResponse.json({ error: "Datos inválidos: trainCode, type, cause, startTime y description son requeridos" }, { status: 400 });
+  if (!validSubCause(b.cause, b.subCause))
+    return NextResponse.json({ error: `La causa raíz "${b.subCause}" no pertenece a la categoría "${b.cause}"` }, { status: 400 });
 
   const row = await prisma.downtimeEvent.create({
     data: {
-      trainCode: b.trainCode, type: b.type, cause: b.cause,
+      trainCode: b.trainCode, type: b.type, cause: b.cause, subCause: b.subCause || null,
       startTime: new Date(b.startTime), endTime: b.endTime ? new Date(b.endTime) : null,
       durationMin: durationOf(b.startTime, b.endTime),
       description: b.description, createdBy: user.displayName, shiftId: b.shiftId ?? null,
@@ -54,6 +64,14 @@ export async function PATCH(req: Request) {
     if (!can(user.role, "log_downtime")) return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     if (b.type && TYPES.includes(b.type)) data.type = b.type;
     if (b.cause && CAUSES.includes(b.cause)) data.cause = b.cause;
+    if (b.subCause !== undefined) {
+      // La sub-causa se valida contra la causa RESULTANTE, no contra la vieja:
+      // si el editor cambia las dos a la vez, lo que importa es que queden coherentes.
+      const effective = (data.cause ?? existing.cause) as DowntimeCause;
+      if (!validSubCause(effective, b.subCause))
+        return NextResponse.json({ error: `La causa raíz "${b.subCause}" no pertenece a la categoría "${effective}"` }, { status: 400 });
+      data.subCause = b.subCause || null;
+    }
     if (b.description) data.description = b.description;
     const start = b.startTime ?? existing.startTime.toISOString();
     const end = b.endTime !== undefined ? b.endTime : existing.endTime?.toISOString() ?? null;

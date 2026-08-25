@@ -8,6 +8,7 @@ import { SortableTable } from "@/components/SortableTable";
 import { can } from "@/lib/permissions";
 import {
   RO_TRAINS, QUALITY_LIMITS, DOWNTIME_TYPE_LABELS, DOWNTIME_CAUSE_LABELS,
+  SUBCAUSE_BY_CODE, subCausesOf, UNCLASSIFIED_SUBCAUSE, type DowntimeCause,
   ALERT_METRIC_LABELS, type OeeSummary,
 } from "@/lib/oee-types";
 import type {
@@ -105,12 +106,16 @@ function ParadasTab({ role, rows, shifts, onChange, send }: {
   const canLog = can(role, "log_downtime");
   const canVal = can(role, "validate_downtime");
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ trainCode: "A25-1", type: "no_planificada", cause: "mecanica", startTime: nowLocal(), endTime: "", description: "" });
+  const [f, setF] = useState({ trainCode: "A25-1", type: "no_planificada", cause: "mecanica", subCause: "", startTime: nowLocal(), endTime: "", description: "" });
+  // La sub-causa pertenece a su categoría: al cambiar la causa hay que soltar la
+  // anterior, o se guardaría un "scaling" bajo "eléctrica".
+  const setCause = (cause: string) => setF((prev) => ({ ...prev, cause, subCause: "" }));
+  const subOptions = subCausesOf(f.cause as DowntimeCause);
 
   const submit = async () => {
     if (!f.description.trim()) { toast.error("Descripción requerida"); return; }
     const ok = await send("/api/oee/downtime", "POST", { ...f, endTime: f.endTime || null, shiftId: null });
-    if (ok) { toast.success("Parada registrada"); setOpen(false); setF({ ...f, description: "", endTime: "" }); onChange(); }
+    if (ok) { toast.success("Parada registrada"); setOpen(false); setF({ ...f, description: "", endTime: "", subCause: "" }); onChange(); }
   };
   const validate = async (id: string) => { if (await send("/api/oee/downtime", "PATCH", { id, validate: true })) { toast.success("Parada validada"); onChange(); } };
   const remove = async (id: string) => { if (await send(`/api/oee/downtime?id=${id}`, "DELETE")) { toast.success("Eliminada"); onChange(); } };
@@ -125,7 +130,18 @@ function ParadasTab({ role, rows, shifts, onChange, send }: {
         <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
           <Field label="Tren"><select className={inputCls} value={f.trainCode} onChange={(e) => setF({ ...f, trainCode: e.target.value })}>{RO_TRAINS.map((c) => <option key={c} value={c}>{c.replace("A25-", "RO-")}</option>)}</select></Field>
           <Field label="Tipo"><select className={inputCls} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>{Object.entries(DOWNTIME_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
-          <Field label="Causa raíz"><select className={inputCls} value={f.cause} onChange={(e) => setF({ ...f, cause: e.target.value })}>{Object.entries(DOWNTIME_CAUSE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+          <Field label="Categoría"><select className={inputCls} value={f.cause} onChange={(e) => setCause(e.target.value)}>{Object.entries(DOWNTIME_CAUSE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+          <Field label="Causa raíz">
+            <select className={inputCls} value={f.subCause} onChange={(e) => setF({ ...f, subCause: e.target.value })}>
+              <option value="">— sin clasificar —</option>
+              {subOptions.map((sc) => <option key={sc.code} value={sc.code}>{sc.label}</option>)}
+            </select>
+            {f.subCause && (
+              <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                {SUBCAUSE_BY_CODE[f.subCause]?.description}
+              </p>
+            )}
+          </Field>
           <Field label="Inicio"><input type="datetime-local" className={inputCls} value={f.startTime} onChange={(e) => setF({ ...f, startTime: e.target.value })} /></Field>
           <Field label="Fin (opcional)"><input type="datetime-local" className={inputCls} value={f.endTime} onChange={(e) => setF({ ...f, endTime: e.target.value })} /></Field>
           <Field label="Descripción"><input className={inputCls} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Detalle de la parada" /></Field>
@@ -140,7 +156,10 @@ function ParadasTab({ role, rows, shifts, onChange, send }: {
         columns={[
           { key: "train", header: "Tren", sortAccessor: (d) => d.trainCode, render: (d) => <span className="font-mono">{d.trainCode.replace("A25-", "RO-")}</span> },
           { key: "type", header: "Tipo", sortAccessor: (d) => DOWNTIME_TYPE_LABELS[d.type as keyof typeof DOWNTIME_TYPE_LABELS] ?? d.type, render: (d) => DOWNTIME_TYPE_LABELS[d.type as keyof typeof DOWNTIME_TYPE_LABELS] ?? d.type },
-          { key: "cause", header: "Causa", sortAccessor: (d) => DOWNTIME_CAUSE_LABELS[d.cause as keyof typeof DOWNTIME_CAUSE_LABELS] ?? d.cause, render: (d) => DOWNTIME_CAUSE_LABELS[d.cause as keyof typeof DOWNTIME_CAUSE_LABELS] ?? d.cause },
+          { key: "cause", header: "Categoría", sortAccessor: (d) => DOWNTIME_CAUSE_LABELS[d.cause as keyof typeof DOWNTIME_CAUSE_LABELS] ?? d.cause, render: (d) => DOWNTIME_CAUSE_LABELS[d.cause as keyof typeof DOWNTIME_CAUSE_LABELS] ?? d.cause },
+          { key: "subCause", header: "Causa raíz", sortAccessor: (d) => (d.subCause ? SUBCAUSE_BY_CODE[d.subCause]?.label ?? d.subCause : "zz"), render: (d) => d.subCause
+            ? <span title={SUBCAUSE_BY_CODE[d.subCause]?.description}>{SUBCAUSE_BY_CODE[d.subCause]?.label ?? d.subCause}</span>
+            : <span className="text-muted-foreground">{UNCLASSIFIED_SUBCAUSE.label}</span> },
           { key: "start", header: "Inicio", sortAccessor: (d) => new Date(d.startTime).getTime(), render: (d) => <span className="tabular-nums">{dt(d.startTime)}</span> },
           { key: "dur", header: "Duración", align: "right", sortAccessor: (d) => d.durationMin ?? null, render: (d) => <span className="tabular-nums">{d.durationMin != null ? `${d.durationMin} min` : "—"}</span> },
           { key: "desc", header: "Descripción", sortAccessor: (d) => d.description, render: (d) => <span className="block max-w-[220px] truncate" title={d.description}>{d.description}</span> },
