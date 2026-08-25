@@ -148,6 +148,9 @@ export interface NonConformity {
   description: string;
   status: "open" | "in_review" | "closed";
   raisedAt: string;
+  /** Quién la levantó. Vacío en las no-conformidades del sistema (sin autor). */
+  raisedBy?: string | null;
+  raisedByRole?: string | null;
 }
 
 export interface InspectionRoute {

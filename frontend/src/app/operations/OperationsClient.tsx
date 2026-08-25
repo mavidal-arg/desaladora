@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { StatCard, Section, Empty, fmtDate } from "@/components/uikit";
+import { StatCard, Section, Empty, fmtDateTime } from "@/components/uikit";
 import { SortableTable } from "@/components/SortableTable";
 import { StateBadge } from "@/components/mes";
 import { TabBar } from "@/components/TabBar";
@@ -88,7 +88,13 @@ function NcTable({ items, empty }: { items: NonConformity[]; empty: string }) {
         { key: "sev", header: "Severidad", sortAccessor: (n) => SEV_RANK[n.severity] ?? 9, render: (n) => <StateBadge state={n.severity} size="sm" /> },
         { key: "desc", header: "Descripción", sortAccessor: (n) => n.description, render: (n) => n.description },
         { key: "status", header: "Estado", sortAccessor: (n) => n.status, render: (n) => <StateBadge state={n.status} size="sm" /> },
-        { key: "raised", header: "Reportada", sortAccessor: (n) => new Date(n.raisedAt).getTime(), render: (n) => fmtDate(n.raisedAt) },
+        {
+          key: "autor", header: "Autor", sortAccessor: (n) => n.raisedBy ?? "",
+          render: (n) => n.raisedBy
+            ? <span>{n.raisedBy}{n.raisedByRole ? <span className="text-[var(--muted-foreground)]"> · {n.raisedByRole}</span> : null}</span>
+            : <span className="text-[var(--muted-foreground)]">sistema</span>,
+        },
+        { key: "raised", header: "Reportada", sortAccessor: (n) => new Date(n.raisedAt).getTime(), render: (n) => fmtDateTime(n.raisedAt) },
       ]}
     />
   );

@@ -26,6 +26,12 @@ const TABS = ["Resumen", "Maintenance", "Planes", "Monitoreo", "Tiempo real", "R
 type Tab = (typeof TABS)[number];
 
 const fmtDate = (s: string) => new Date(s).toLocaleDateString("es-AR", { year: "numeric", month: "2-digit", day: "2-digit" });
+/** Con hora: una observación de terreno se ubica por turno, no sólo por día. */
+const fmtDateTime = (s: string) =>
+  new Date(s).toLocaleString("es-AR", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
 
 export function Asset360Modal({ assetId, onClose }: { assetId: string; onClose: () => void }) {
   const [data, setData] = useState<Asset360 | null>(null);
@@ -349,11 +355,17 @@ function SopTab({ docs, ncs }: { docs: SeDocument[]; ncs: NonConformity[] }) {
       <section>
         <h3 className="mb-2 text-sm font-semibold">No-conformidades</h3>
         {ncs.length === 0 ? <Empty text="Sin no-conformidades." /> : (
-          <Table head={<><Th>Código</Th><Th>Severidad</Th><Th>Descripción</Th><Th>Estado</Th></>}>
+          <Table head={<><Th>Código</Th><Th>Severidad</Th><Th>Descripción</Th><Th>Estado</Th><Th>Autor</Th><Th>Reportada</Th></>}>
             {ncs.map((n) => (
               <tr key={n.id}>
                 <Td>{n.code}</Td><Td><StateBadge state={n.severity} size="sm" /></Td>
                 <Td>{n.description}</Td><Td><StateBadge state={n.status.replace("_", "")} label={n.status.replace("_", " ")} size="sm" /></Td>
+                <Td>
+                  {n.raisedBy
+                    ? <>{n.raisedBy}<span className="text-[var(--muted-foreground)]">{n.raisedByRole ? ` · ${n.raisedByRole}` : ""}</span></>
+                    : <span className="text-[var(--muted-foreground)]">sistema</span>}
+                </Td>
+                <Td>{fmtDateTime(n.raisedAt)}</Td>
               </tr>
             ))}
           </Table>

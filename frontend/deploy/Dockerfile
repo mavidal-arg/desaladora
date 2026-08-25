@@ -8,13 +8,19 @@ FROM node:20-bookworm-slim AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_PUBLIC_BASE_PATH=/desaladora-coquimbo-v2-ops
+# El basePath de Next se CONGELA en el build: una URL distinta exige recompilar.
+# Por eso es un ARG — es lo que permite clonar la app para otro cliente sin tocar
+# el código (ver deploy/clone.sh y el asistente de Administración).
+ARG BASE_PATH=/desaladora-coquimbo-v2-ops
+ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
 RUN npx prisma generate && npm run build
 
 FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ENV NEXT_PUBLIC_BASE_PATH=/desaladora-coquimbo-v2-ops
+# Los ARG no cruzan de una etapa a otra: hay que volver a declararlo acá.
+ARG BASE_PATH=/desaladora-coquimbo-v2-ops
+ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
 ENV PORT=3000
 # Standalone server (includes a trimmed node_modules)…
 COPY --from=build /app/.next/standalone ./

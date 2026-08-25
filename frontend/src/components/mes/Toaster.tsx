@@ -17,6 +17,11 @@ export function Toaster() {
     <SonnerToaster
       position="bottom-right"
       toastOptions={{
+        // En el teléfono el toast cae justo encima de la barra de acción de las
+        // hojas inferiores (la vista de terreno por QR) y tapa el botón de
+        // confirmar durante unos segundos. El margen lo levanta sólo en pantalla
+        // angosta; en escritorio queda donde estaba.
+        className: "mb-24 md:mb-0",
         style: {
           fontFamily: "IBM Plex Mono, monospace",
           fontSize: "12px",

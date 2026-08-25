@@ -33,9 +33,10 @@ export async function POST(req: Request) {
   const ncCode = `NC-AR-${yymmdd}-${String(seq).padStart(3, "0")}`;
 
   const severity = intervention ? "high" : severityIn;
-  const desc =
-    (intervention ? "[INTERVENCIÓN SOLICITADA] " : "") +
-    `[Obs. terreno · ${user.displayName}] ` + description;
+  // El autor ya NO se antepone al texto: va en `raisedBy`/`raisedByRole`, que se
+  // pueden filtrar y ordenar. El marcador de intervención sí se queda — eso es
+  // estado del hallazgo, no autoría.
+  const desc = (intervention ? "[INTERVENCIÓN SOLICITADA] " : "") + description;
 
   const nc = await prisma.nonConformity.create({
     data: {
@@ -45,6 +46,11 @@ export async function POST(req: Request) {
       severity,
       description: desc,
       status: "open",
+      raisedBy: user.displayName,
+      raisedByRole: user.role,
+      // Explícito y no por default de la DB: es la estampa de tiempo del
+      // hallazgo, el dato que después se muestra en la app.
+      raisedAt: now,
     },
   });
   return NextResponse.json({ ok: true, code: nc.code, id: nc.id }, { status: 201 });

@@ -45,6 +45,7 @@ export async function listNonConformities(assetId?: string): Promise<NonConformi
   return rows.map((n) => ({
     id: n.id, code: n.code, assetId: n.equipmentId, severity: n.severity as Criticality,
     description: n.description, status: n.status as NonConformity["status"], raisedAt: n.raisedAt.toISOString(),
+    raisedBy: n.raisedBy, raisedByRole: n.raisedByRole,
   }));
 }
 

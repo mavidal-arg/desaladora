@@ -107,3 +107,17 @@ export function Empty({ text }: { text: string }) {
 }
 
 export const fmtDate = (s: string) => new Date(s).toLocaleDateString("es-AR", { year: "numeric", month: "2-digit", day: "2-digit" });
+
+/**
+ * Fecha CON hora, para lo que se levanta en terreno: en una observación importa
+ * el turno y el momento, no sólo el día. Se resuelve en el navegador, así que
+ * muestra la hora local de quien mira — que en planta es la hora de planta.
+ *
+ * Deliberadamente separado de `fmtDate`: las órdenes de trabajo y los planes se
+ * miden en días y agregarles la hora sería ruido.
+ */
+export const fmtDateTime = (s: string) =>
+  new Date(s).toLocaleString("es-AR", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });

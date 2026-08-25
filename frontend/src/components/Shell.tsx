@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, type ElementType, useState, useEffect } from "react";
 import { useTheme } from "./ThemeProvider";
+import { useBrand } from "./BrandProvider";
+import { iniciales, esImagen } from "@/lib/brand";
 import {
   LayoutDashboard,
   Boxes,
@@ -22,8 +24,8 @@ import {
   Menu,
   X,
   Waypoints,
-  Droplets,
   Atom,
+  ShieldCheck,
 } from "lucide-react";
 
 // basePath para servir assets estáticos de /public bajo el reverse-proxy de Tier0.
@@ -80,6 +82,37 @@ export const navSections: NavSection[] = [
 
 // Flat list for backward compatibility
 export const defaultModules: NavModule[] = [...topModules, ...navSections.flatMap((s) => s.modules)];
+
+/**
+ * El logo del cliente. Si subió una imagen se usa; si no, un cuadro con sus
+ * iniciales sobre el color de marca. Los cuatro lugares donde antes decía
+ * "Aguas del Valle" a mano ahora pasan por acá.
+ */
+function MarcaLogo({ size = 36 }: { size?: number }) {
+  const { app, branding } = useBrand();
+  if (esImagen(branding.logo)) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={branding.logo}
+        alt={app.client}
+        style={{ height: size, width: "auto", maxWidth: size * 2.4 }}
+        className="shrink-0 rounded-lg object-contain"
+      />
+    );
+  }
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-lg font-bold"
+      style={{
+        height: size, width: size, fontSize: Math.round(size * 0.4),
+        background: "var(--accent)", color: "var(--accent-foreground)",
+      }}
+    >
+      {iniciales(app.client) || app.shortName.slice(0, 2)}
+    </div>
+  );
+}
 
 export interface ShellUser {
   displayName: string;
@@ -171,6 +204,7 @@ export function Shell({
 }) {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
+  const brand = useBrand();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Close the mobile drawer whenever the route changes.
@@ -198,13 +232,11 @@ export function Shell({
         {/* Arauco Brand */}
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] text-black">
-              <Droplets className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold leading-tight tracking-tight text-[var(--foreground)]">Aguas del Valle</h1>
-              <p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted-foreground)]">
-                Desaladora Coquimbo <span className="rounded bg-[var(--accent)]/20 px-1 font-semibold text-[var(--accent)]">V2</span>
+            <MarcaLogo size={36} />
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold leading-tight tracking-tight text-[var(--foreground)]">{brand.app.client}</h1>
+              <p className="truncate text-[9px] uppercase tracking-[0.15em] text-[var(--muted-foreground)]">
+                {brand.app.site}
               </p>
             </div>
           </div>
@@ -245,6 +277,24 @@ export function Shell({
               defaultOpen={idx === 0}
             />
           ))}
+
+          {/* Administración sólo para Supervisor. Hasta ahora la pantalla existía
+              pero no estaba en el menú: se llegaba escribiendo la URL. Ocultarla
+              NO es el control de acceso — ese vive en el servidor. */}
+          {user?.role === "Supervisor" && (
+            <Link
+              href="/admin"
+              aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+              className={`eam-focus mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-medium transition-colors ${
+                pathname.startsWith("/admin")
+                  ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <ShieldCheck className="h-3.5 w-3.5 opacity-70" />
+              <span className="flex-1 text-left">Administración</span>
+            </Link>
+          )}
         </div>
 
         {/* Footer */}
@@ -276,14 +326,14 @@ export function Shell({
               )}
             </div>
           )}
-          <p className="text-[10px] text-[var(--muted-foreground)]">Aguas del Valle · Desaladora Coquimbo V2</p>
+          <p className="text-[10px] text-[var(--muted-foreground)]">{brand.app.footer}</p>
         </div>
       </nav>
 
       {/* Folded icon rail — visible only on tablet (md–lg) */}
       <nav className="hidden w-16 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--sidebar)] py-4 md:flex lg:hidden">
-        <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] text-base font-bold text-black">
-          A
+        <div className="mb-4">
+          <MarcaLogo size={36} />
         </div>
         <div className="flex flex-1 flex-col items-center gap-1 overflow-y-auto">
           {defaultModules.map((mod) => {
@@ -336,10 +386,8 @@ export function Shell({
             <Menu className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--accent)] text-xs font-bold text-black">
-              A
-            </div>
-            <span className="text-sm font-semibold tracking-tight text-[var(--foreground)]">Aguas del Valle</span>
+            <MarcaLogo size={28} />
+            <span className="truncate text-sm font-semibold tracking-tight text-[var(--foreground)]">{brand.app.client}</span>
           </div>
         </header>
 

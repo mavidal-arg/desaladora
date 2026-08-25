@@ -45,7 +45,26 @@ export type PlantConfig = {
     id: string; code: string; name: string; company: string; location: string;
     product: string; capacity: string; commissioned: string;
   };
-  branding: { logo: string; logoLight: string; primary: string; ink: string; accent: string };
+  /**
+   * Identidad de la APLICACIÓN — distinta de la de la planta. Es lo que se ve en
+   * la barra lateral, el login y la pestaña del navegador, y es exactamente lo
+   * que cambia al entregarle esta app a otro cliente.
+   */
+  app: {
+    name: string;       // "EAM — Equipment Asset Management"
+    shortName: string;  // "EAM"
+    client: string;     // "Aguas del Valle"
+    site: string;       // "Desaladora Coquimbo V2"
+    slug: string;       // "desaladora-coquimbo-v2" → URL, contenedor y base del clon
+    tagline: string;    // bajada bajo el título del login
+    footer: string;     // pie de la barra lateral y del login
+  };
+  branding: {
+    /** Data URI (subido desde Admin) o nombre de archivo heredado del template. */
+    logo: string;
+    logoLight: string;
+    primary: string; ink: string; accent: string;
+  };
   flags: {
     phase: number;          // fase operativa mostrada (1|2|3)
     phaseLs: number;        // caudal de captación de la fase (l/s)
@@ -62,6 +81,10 @@ const sig = (signal: string, label: string, unit: string, base: number, amp: num
   ({ signal, label, unit, base, amp, min, max });
 
 // ── Config Desaladora Coquimbo ───────────────────────────────────────────────
+// ⚠ `version` NO se toca al agregar campos. `prisma/seed.ts` re-siembra el
+// singleton en CADA arranque del contenedor si `storedVersion < PLANT.version`:
+// subirla le pisa la identidad a Coquimbo y a todos los clones en el próximo
+// restart. Los campos nuevos se resuelven mezclando defaults en el store.
 export const PLANT: PlantConfig = {
   version: 1,
   plant: {
@@ -69,6 +92,15 @@ export const PLANT: PlantConfig = {
     company: "Aguas del Valle S.A.", location: "Panul, Coquimbo · Región de Coquimbo, Chile",
     product: "Agua potable por ósmosis inversa", capacity: "Fase 1: 800 l/s (Fase 2: 1.200 l/s)",
     commissioned: "2024",
+  },
+  app: {
+    name: "EAM — Equipment Asset Management",
+    shortName: "EAM",
+    client: "Aguas del Valle",
+    site: "Desaladora Coquimbo V2",
+    slug: "desaladora-coquimbo-v2",
+    tagline: "Entity-360 · PI · SAP · SE Suite",
+    footer: "Aguas del Valle · Desaladora Coquimbo",
   },
   branding: {
     logo: "logo-aguasdelvalle.png", logoLight: "logo-aguasdelvalle-blanco.png",

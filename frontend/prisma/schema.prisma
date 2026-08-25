@@ -171,6 +171,11 @@ model NonConformity {
   severity    String    // low, medium, high, critical
   description String
   status      String    @default("open") // open, in_review, closed
+  // Autoría de la observación de terreno. Antes iba incrustada en `description`
+  // como "[Obs. terreno · Nombre] …", así que no se podía filtrar ni ordenar por
+  // quién la levantó. Nullables: las no-conformidades del sistema no tienen autor.
+  raisedBy     String?
+  raisedByRole String?
   raisedAt    DateTime  @default(now())
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

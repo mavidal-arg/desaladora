@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Droplets, QrCode } from "lucide-react";
 import { getAssetArView } from "@/lib/ar";
+import { getPlantConfig } from "@/lib/plant-config-store";
+import { esImagen } from "@/lib/brand";
 import { ArAssetView } from "./ArAssetView";
 
 export const dynamic = "force-dynamic";
@@ -9,14 +11,20 @@ export default async function ArPage({ params }: { params: Promise<{ code: strin
   const { code: raw } = await params;
   const code = decodeURIComponent(raw);
   const view = await getAssetArView(code);
+  const { app, branding } = await getPlantConfig();
 
   return (
     <div className="min-h-dvh bg-[var(--background)] text-[var(--foreground)]">
       {/* Cabecera branded compacta (sin Shell) */}
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--card)]/95 px-4 py-3 backdrop-blur">
-        <Droplets className="h-5 w-5 text-[var(--accent)]" />
+        {esImagen(branding.logo) ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={branding.logo} alt={app.client} className="h-6 w-auto max-w-[96px] object-contain" />
+        ) : (
+          <Droplets className="h-5 w-5 text-[var(--accent)]" />
+        )}
         <div className="leading-tight">
-          <div className="text-sm font-semibold">Aguas del Valle</div>
+          <div className="text-sm font-semibold">{app.client}</div>
           <div className="text-[10px] uppercase tracking-[0.15em] text-[var(--muted-foreground)]">Vista de terreno · QR</div>
         </div>
       </header>
