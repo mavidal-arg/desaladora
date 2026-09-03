@@ -1,0 +1,110 @@
+{
+  "app": "desaladora-coquimbo-v2",
+  "repo": "/srv/tier0/apps/desaladora-coquimbo-v2",
+  "declarado": {
+    "intencion": "demo-publica",
+    "para": "Muestra de capacidades de Tier0 para clientes industriales: el link se comparte en una reunión comercial y queda accesible sin darle usuario de la plataforma a nadie. Que conteste 200 sin login es la función, no un descuido.",
+    "responsable": "mariano",
+    "datos": "simulados (ADAPTER_MODE=sim, base propia por clon)",
+    "riesgo_plataforma": "medio",
+    "por_que": "Clon de trabajo de la V1 y molde de la fábrica de apps: de este repo salen todos los clones por cliente. Mismo hueco que la V1 en `POST /api/twin/ingest`, sin token seteado. Se publica por Kong (`publicar_app.py`), no por una location de nginx.",
+    "que_la_volveria_insegura": [
+      "Cargarle datos reales de un cliente: hoy todo lo que muestra es simulado o semilla.",
+      "Agregarle un endpoint de escritura sin guardia de servidor (`requireAuth`).",
+      "Apuntarla a una base compartida con otra app, o a un rol con permisos fuera de su schema.",
+      "Que un clon nuevo herede la apertura sin que nadie decida abrirlo.",
+      "Que `TWIN_INGEST_TOKEN` siga sin setear mientras la app esté abierta."
+    ],
+    "escrituras_aceptadas": [
+      "POST /api/twin/ingest"
+    ],
+    "por_instancia": {
+      "aguas-del-norte-desaladora-iquique": {
+        "intencion": "pendiente-de-decision",
+        "por_que": "Clon con la identidad a medio pisar: muestra nombres y textos que no terminan de corresponder al cliente del cartel. Abierta al público, una demo que se contradice a sí misma es peor que no tenerla. Decidir con Mariano: terminar la identidad o cerrarla."
+      }
+    },
+    "revisado": "2026-09-03"
+  },
+  "medido": {
+    "fecha": "2026-09-03T11:26:57+00:00",
+    "instancias": [
+      {
+        "slug": "aguas-del-norte-desaladora-iquique",
+        "base_path": "/aguas-del-norte-desaladora-iquique-ops",
+        "via": "kong",
+        "portero": "ninguno",
+        "abierta_por": "whitelist de Kong: ^/aguas-del-norte-desaladora-iquique-ops.*$",
+        "http": "200"
+      },
+      {
+        "slug": "desaladora-coquimbo-v2",
+        "base_path": "/desaladora-coquimbo-v2-ops",
+        "via": "kong",
+        "portero": "ninguno",
+        "abierta_por": "whitelist de Kong: ^/desaladora-coquimbo-v2-ops.*$",
+        "http": "200"
+      }
+    ],
+    "container": {
+      "nombre": "aguas-del-norte-desaladora-iquique-ops",
+      "vivo": true,
+      "imagen": "aguas-del-norte-desaladora-iquique-ops:latest",
+      "digest": "sha256:d57fe28c5d21",
+      "creada": "2026-08-28T15:07:05",
+      "estado": "running"
+    },
+    "datos": {
+      "adapter_mode": "sim",
+      "base": "aguas_del_norte_desaladora_iquique",
+      "rol": "misa_engine",
+      "superusuario": false,
+      "host": "postgresql"
+    },
+    "endpoints_publicos": {
+      "lectura": [
+        "GET /api/ar/[code]",
+        "GET /api/assets/[id]",
+        "GET /api/assets/[id]/trend",
+        "GET /api/assets",
+        "GET /api/auth/directory",
+        "GET /api/auth/me",
+        "GET /api/health",
+        "GET /api/oee/alert-rules",
+        "GET /api/oee/alerts",
+        "GET /api/oee/downtime",
+        "GET /api/oee/quality",
+        "GET /api/oee/shifts",
+        "GET /api/oee/summary",
+        "GET /api/platform/me",
+        "GET /api/twin/ceb-alert",
+        "GET /api/twin/cip-alert"
+      ],
+      "escritura": [
+        "POST /api/ar/observation",
+        "POST /api/auth/assume",
+        "POST /api/auth/login",
+        "POST /api/auth/logout",
+        "DELETE /api/oee/alert-rules",
+        "PATCH /api/oee/alert-rules",
+        "POST /api/oee/alert-rules",
+        "DELETE /api/oee/alerts",
+        "PATCH /api/oee/alerts",
+        "DELETE /api/oee/downtime",
+        "PATCH /api/oee/downtime",
+        "POST /api/oee/downtime",
+        "DELETE /api/oee/quality",
+        "PATCH /api/oee/quality",
+        "POST /api/oee/quality",
+        "DELETE /api/oee/shifts",
+        "POST /api/oee/shifts",
+        "POST /api/twin/ingest"
+      ],
+      "sin_guardia": [
+        "POST /api/twin/ingest"
+      ],
+      "bases": []
+    }
+  },
+  "hallazgos": []
+}
