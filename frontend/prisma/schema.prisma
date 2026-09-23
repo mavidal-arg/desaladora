@@ -171,6 +171,13 @@ model NonConformity {
   severity    String    // low, medium, high, critical
   description String
   status      String    @default("open") // open, in_review, closed
+  // Categoría corta del hallazgo — permite contar recurrencia por equipo sin
+  // depender de regex sobre `description` (como hacía antes /operations).
+  findingType String    @default("otro") // corrosion, fuga_sello, vibracion, otro
+  // Resultado del tratamiento, sólo se fija al cerrar. Separado de `status`
+  // para no reinterpretar los 3 valores de status ya usados en toda la UI.
+  treatmentOutcome String? // resolved, false_positive
+  treatmentNote    String? // última nota de tratamiento, para lectura rápida sin ir al log
   // Autoría de la observación de terreno. Antes iba incrustada en `description`
   // como "[Obs. terreno · Nombre] …", así que no se podía filtrar ni ordenar por
   // quién la levantó. Nullables: las no-conformidades del sistema no tienen autor.
@@ -179,6 +186,52 @@ model NonConformity {
   raisedAt    DateTime  @default(now())
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  readings    ObservationReading[]
+  actions     NonConformityAction[]
+}
+
+// ─── Log de acciones sobre una no-conformidad (creación, edición, transición) ───
+// Append-only, espejo de CaseTreatmentHistoryRow en icsh-assistant/case_store.
+// Sirve doble propósito: (1) auditoría de tratamiento por hallazgo puntual, y
+// (2) fuente de la recurrencia por equipo — "cuántas veces se levantó esta
+// observación" = COUNT de action="created" agrupado por equipmentId+findingType.
+model NonConformityAction {
+  id              String        @id @default(cuid())
+  nonConformityId String
+  nonConformity   NonConformity @relation(fields: [nonConformityId], references: [id], onDelete: Cascade)
+  equipmentId     String        // denormalizado: cuenta recurrencia sin JOIN
+  findingType     String        // copiado de NonConformity al momento de la acción
+  action          String        // created | edited | status_changed | note
+  fromStatus      String?
+  toStatus        String?
+  note            String?
+  changedFields   Json?         // { field: [before, after] } — sólo en "edited"
+  actor           String
+  actorRole       String?
+  createdAt       DateTime      @default(now())
+
+  @@index([nonConformityId])
+  @@index([equipmentId, findingType])
+}
+
+// ─── Snapshot de datos al levantar una observación de terreno ───
+// Antes, al escanear el QR y levantar una observación, no quedaba registro de
+// QUÉ datos se veían en ese momento. Acá se guardan dos fotos por observación:
+//   · source = "app"   → lo que mostraba la app (todas las señales del activo)
+//   · source = "field" → lo que el operador leyó en el instrumento
+// El histórico consultable por activo = la acumulación de estas filas.
+model ObservationReading {
+  id              String        @id
+  nonConformityId String
+  nonConformity   NonConformity @relation(fields: [nonConformityId], references: [id], onDelete: Cascade)
+  signal          String
+  label           String
+  value           Float
+  unit            String
+  source          String        // "app" | "field"
+  capturedAt      DateTime      @default(now())
+
+  @@index([nonConformityId])
 }
 
 // ─── Inspection Routes (patrol routes + checklist + task history) ───
@@ -357,21 +410,102 @@ model AlertRule {
 
 // Instancias de alerta (workflow activa → reconocida → resuelta).
 model AlertEvent {
-  id          String    @id @default(cuid())
-  ruleId      String
-  trainCode   String?
-  level       String    // critico | advertencia | info
-  status      String    @default("activa") // activa | reconocida | resuelta
-  message     String
-  ts          DateTime  @default(now())
-  ackBy       String?
-  ackAt       DateTime?
-  resolvedAt  DateTime?
-  actionTaken String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  ruleId        String
+  trainCode     String?
+  level         String    // critico | advertencia | info
+  status        String    @default("activa") // activa | reconocida | resuelta
+  message       String
+  ts            DateTime  @default(now())
+  ackBy         String?
+  ackAt         DateTime?
+  resolvedAt    DateTime?
+  actionTaken   String?
+  // Despacho (in-app / Email / WhatsApp / llamada) — null = todavía no se intentó.
+  notifiedAt    DateTime?
+  // Origen de la alerta. "metric" = la disparó el evaluador de umbrales sobre
+  // telemetría; "observation" = la levantó una persona en terreno desde el QR.
+  // `sourceId` guarda el id de la NonConformity en ese caso. No hay FK a
+  // propósito: AlertEvent no debe depender del ciclo de vida del hallazgo
+  // (`ruleId` tampoco es FK, misma razón).
+  sourceType    String              @default("metric") // metric | observation
+  sourceId      String?
+  notifications AlertNotification[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([status, ts])
+}
+
+// Política de despacho: qué canales están habilitados para cada severidad.
+// Reemplaza la constante LEVEL_CHANNELS que vivía hardcodeada en alert-notify.ts.
+model AlertChannelRule {
+  level     String   @id // critico | advertencia | info
+  // in-app es un BROADCAST: se ve en la app de cualquiera que la tenga abierta,
+  // así que no necesita lista de destinatarios ni credenciales de terceros. Por
+  // eso arranca encendido — es el único canal que funciona sin configurar nada.
+  inapp     Boolean  @default(true)
+  email     Boolean  @default(false)
+  whatsapp  Boolean  @default(false)
+  voice     Boolean  @default(false)
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+// Lista de distribución: quién recibe alertas y a qué (severidad, canal) está
+// suscripto. Reemplaza el contacto único que había antes (AlertContact
+// singleton) — en operación real es un roster por planta/turno, no una sola
+// persona.
+model AlertRecipient {
+  id            String   @id @default(cuid())
+  name          String
+  email         String?
+  phoneWhatsapp String?  // E.164 — puede diferir del de voz (sandbox de WhatsApp)
+  phoneVoice    String?  // E.164, para la llamada de Twilio
+  active        Boolean  @default(true)
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  subscriptions AlertRecipientSubscription[]
+}
+
+// Suscripción granular severidad+canal de un destinatario — un mismo
+// AlertRecipient puede querer "crítico por email" pero no "advertencia por
+// WhatsApp".
+model AlertRecipientSubscription {
+  id          String         @id @default(cuid())
+  recipientId String
+  recipient   AlertRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  level       String         // critico | advertencia | info
+  // Sólo canales SALIENTES: in-app no se suscribe, es broadcast.
+  channel     String         // email | whatsapp | voice
+  createdAt   DateTime       @default(now())
+
+  @@unique([recipientId, level, channel])
+  @@index([level, channel])
+}
+
+// Auditoría de despacho saliente — una fila por CANAL intentado, no por
+// AlertEvent. Espejo de `case_store.notifications` en icsh-assistant: se
+// escribe SIEMPRE, incluso si el envío falla o no hay webhook configurado,
+// para que la falta de aviso sea visible y no un silencio.
+model AlertNotification {
+  id             String     @id @default(cuid())
+  alertEventId   String
+  alertEvent     AlertEvent @relation(fields: [alertEventId], references: [id])
+  channel        String     // inapp | email | whatsapp | voice
+  recipient      String     // email o teléfono; "*" para el broadcast in-app
+  payload        Json
+  delivered      Boolean    @default(false)
+  attempts       Int        @default(0)
+  lastError      String?
+  responseStatus Int?
+  createdAt      DateTime   @default(now())
+  deliveredAt    DateTime?
+
+  @@index([alertEventId])
+  @@index([delivered, createdAt])
 }
 
 // Config de planta editable (singleton) — fuente data-driven del mímico/áreas.

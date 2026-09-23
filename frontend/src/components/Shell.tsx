@@ -6,6 +6,7 @@ import { type ReactNode, type ElementType, useState, useEffect } from "react";
 import { useTheme } from "./ThemeProvider";
 import { useBrand } from "./BrandProvider";
 import { iniciales, esImagen } from "@/lib/brand";
+import { apiUrl } from "@/lib/utils";
 import {
   LayoutDashboard,
   Boxes,
@@ -25,8 +26,11 @@ import {
   X,
   Waypoints,
   Atom,
-  ShieldCheck,
+  Bell,
+  AlertTriangle,
 } from "lucide-react";
+import { FindingAlertBanner } from "@/components/FindingAlertBanner";
+import { AlertBubble } from "@/components/AlertBubble";
 
 // basePath para servir assets estáticos de /public bajo el reverse-proxy de Tier0.
 // (basePath ya no se usa acá; el wordmark es texto)
@@ -66,6 +70,7 @@ export const navSections: NavSection[] = [
       { key: "spare-parts", label: "Repuestos", short: "REP", href: "/spare-parts", icon: Package },
       { key: "operations", label: "Funcionamiento (Horas)", short: "HRS", href: "/operations", icon: Activity },
       { key: "inspection", label: "Inspección", short: "INS", href: "/inspection", icon: ClipboardCheck },
+      { key: "hallazgos", label: "Hallazgos", short: "HLZ", href: "/hallazgos", icon: AlertTriangle },
     ],
   },
   {
@@ -74,6 +79,7 @@ export const navSections: NavSection[] = [
     icon: TrendingUp,
     modules: [
       { key: "twin", label: "Gemelo Digital", short: "TWN", href: "/twin", icon: Atom },
+      { key: "alertas", label: "Alertas", short: "ALR", href: "/alertas", icon: Bell },
       { key: "predictive", label: "Predictivo", short: "PRD", href: "/predictive", icon: Brain },
       { key: "analytics", label: "Analítica", short: "ANL", href: "/analytics", icon: BarChart3 },
     ],
@@ -192,14 +198,137 @@ function NavSectionGroup({
   );
 }
 
+interface PersonaDelPlantel {
+  id: string;
+  displayName: string;
+  role: string;
+  department: string;
+}
+
+/**
+ * Quién está mirando la demo, abajo a la izquierda — y con qué otra persona
+ * cambiarlo, sin clave.
+ *
+ * Antes esto era un "Cambiar usuario" que cerraba la sesión y mandaba a /login.
+ * La app ahora abre sin login para quien recibe el link, así que ese camino
+ * dejaba al visitante frente a una pantalla de claves que no tiene. El plantel
+ * llega de `/api/auth/directory`, que NO devuelve las claves: la lista se puede
+ * dibujar en el cliente sin filtrarlas al bundle.
+ *
+ * La marca "de muestra" no es decorativa: avisa que la identidad se tomó sin
+ * acreditar, que es exactamente lo que hace que el QR de un activo vuelva a
+ * pedir la clave antes de firmar una observación.
+ */
+function SelectorDePersona({
+  user,
+  via,
+  onElegirPersona,
+}: {
+  user: ShellUser;
+  via: "demo" | "password" | null;
+  onElegirPersona?: (userId: string) => Promise<void> | void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [plantel, setPlantel] = useState<PersonaDelPlantel[] | null>(null);
+  const [cambiando, setCambiando] = useState<string | null>(null);
+
+  // El plantel se pide recién al abrir, y una sola vez: es una lista fija de
+  // siete personas, no hace falta traerla en cada carga de la app.
+  useEffect(() => {
+    if (!abierto || plantel) return;
+    let cancelado = false;
+    fetch(apiUrl("/api/auth/directory"))
+      .then((r) => (r.ok ? r.json() : { users: [] }))
+      .then((d) => { if (!cancelado) setPlantel(d.users ?? []); })
+      .catch(() => { if (!cancelado) setPlantel([]); });
+    return () => { cancelado = true; };
+  }, [abierto, plantel]);
+
+  if (!onElegirPersona) {
+    return (
+      <div>
+        <p className="truncate text-xs font-medium text-[var(--foreground)]">{user.displayName}</p>
+        <p className="text-[10px] text-[var(--muted-foreground)]">{user.role}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[var(--muted)]"
+      >
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-medium text-[var(--foreground)]">
+            {user.displayName}
+          </span>
+          <span className="block text-[10px] text-[var(--muted-foreground)]">
+            {user.role}
+            {via === "demo" && " · de muestra"}
+          </span>
+        </span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform ${abierto ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+
+      {abierto && (
+        <div className="mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1">
+          {plantel === null ? (
+            <p className="px-2 py-1.5 text-[10px] text-[var(--muted-foreground)]">Cargando…</p>
+          ) : (
+            plantel.map((p) => (
+              <button
+                key={p.id}
+                disabled={cambiando !== null}
+                onClick={async () => {
+                  setCambiando(p.id);
+                  try {
+                    await onElegirPersona(p.id);
+                    setAbierto(false);
+                  } finally {
+                    setCambiando(null);
+                  }
+                }}
+                className="block w-full rounded px-2 py-1.5 text-left transition-colors hover:bg-[var(--muted)] disabled:opacity-50"
+              >
+                <span className="block truncate text-[11px] text-[var(--foreground)]">
+                  {p.displayName}
+                </span>
+                <span className="block truncate text-[10px] text-[var(--muted-foreground)]">
+                  {p.role} · {p.department}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export function Shell({
   user,
-  onSwitchUser,
+  via = null,
+  esAdminPlataforma = false,
+  nombrePlataforma = null,
+  onElegirPersona,
   children,
 }: {
   modules?: NavModule[];
   user?: ShellUser | null;
-  onSwitchUser?: () => void;
+  /** Cómo se obtuvo la identidad: "demo" (elegida sin clave) o "password". */
+  via?: "demo" | "password" | null;
+  /** Admin de Tier0 (supOS). NO es el rol de planta de la demo. */
+  esAdminPlataforma?: boolean;
+  /** Nombre de la cuenta de Tier0, para mostrar cuando no hay usuario de demo. */
+  nombrePlataforma?: string | null;
+  /** Toma la identidad de otra persona del plantel, sin clave. */
+  onElegirPersona?: (userId: string) => Promise<void> | void;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -278,27 +407,13 @@ export function Shell({
             />
           ))}
 
-          {/* Administración sólo para Supervisor. Hasta ahora la pantalla existía
-              pero no estaba en el menú: se llegaba escribiendo la URL. Ocultarla
-              NO es el control de acceso — ese vive en el servidor. */}
-          {user?.role === "Supervisor" && (
-            <Link
-              href="/admin"
-              aria-current={pathname.startsWith("/admin") ? "page" : undefined}
-              className={`eam-focus mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-medium transition-colors ${
-                pathname.startsWith("/admin")
-                  ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <ShieldCheck className="h-3.5 w-3.5 opacity-70" />
-              <span className="flex-1 text-left">Administración</span>
-            </Link>
-          )}
         </div>
 
         {/* Footer */}
         <div className="border-t border-[var(--border)] px-4 py-3 space-y-2">
+          {/* Campanita de alertas in-app — variante con etiqueta, para el
+              sidebar expandido. El riel de íconos tiene la suya más abajo. */}
+          <AlertBubble user={user} placement="sidebar" variant="row" />
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
@@ -312,19 +427,23 @@ export function Shell({
             <span>{theme === "dark" ? "Modo claro" : "Modo oscuro"}</span>
           </button>
 
-          {user && (
+          {/* Sin usuario de demo pero con sesión de Tier0: el operador tiene que
+              ver con qué identidad está entrando, y que es la de plataforma. */}
+          {!user && esAdminPlataforma && (
             <div>
-              <p className="truncate text-xs font-medium text-[var(--foreground)]">{user.displayName}</p>
-              <p className="text-[10px] text-[var(--muted-foreground)]">{user.role}</p>
-              {onSwitchUser && (
-                <button
-                  onClick={onSwitchUser}
-                  className="mt-1 text-[10px] text-[var(--muted-foreground)] underline-offset-2 hover:underline hover:text-[var(--foreground)]"
-                >
-                  Cambiar usuario
-                </button>
-              )}
+              <p className="truncate text-xs font-medium text-[var(--foreground)]">
+                {nombrePlataforma ?? "Administrador"}
+              </p>
+              <p className="text-[10px] text-[var(--muted-foreground)]">Tier0 · administrador</p>
             </div>
+          )}
+
+          {user && (
+            <SelectorDePersona
+              user={user}
+              via={via}
+              onElegirPersona={onElegirPersona}
+            />
           )}
           <p className="text-[10px] text-[var(--muted-foreground)]">{brand.app.footer}</p>
         </div>
@@ -363,6 +482,11 @@ export function Shell({
             );
           })}
         </div>
+        {/* Campanita de alertas in-app — al lado del switch de tema, así se ve
+            desde cualquier pantalla y no sólo entrando a /alertas. */}
+        <div className="mt-2 flex h-10 w-10 items-center justify-center">
+          <AlertBubble user={user} placement="sidebar" />
+        </div>
         <button
           onClick={toggleTheme}
           title={theme === "dark" ? "Modo claro" : "Modo oscuro"}
@@ -389,8 +513,12 @@ export function Shell({
             <MarcaLogo size={28} />
             <span className="truncate text-sm font-semibold tracking-tight text-[var(--foreground)]">{brand.app.client}</span>
           </div>
+          <div className="ml-auto">
+            <AlertBubble user={user} placement="header" />
+          </div>
         </header>
 
+        <FindingAlertBanner />
         <main className="flex-1 overflow-y-auto bg-[var(--background)]">{children}</main>
       </div>
     </div>
