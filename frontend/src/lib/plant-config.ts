@@ -195,10 +195,14 @@ export const PLANT: PlantConfig = {
       specs: { presion: "62 bar", power: "1.500 kW" }, mimic: { x: 8, y: 1 }, primarySignal: "pressure",
       signals: [sig("pressure", "Presión", "bar", 61, 1.5, 0, 75), sig("flow", "Caudal", "m³/h", 1180, 60, 0, 1400), sig("motorCurrent", "Corriente", "A", 148, 8, 0, 220)],
       help: "Segunda bomba de alta presión (configuración redundante) alimentando los trenes de membranas RO." },
-    ...rorack("A25-1", "Rack Ósmosis Inversa 1", "running", 79),
-    ...rorack("A25-2", "Rack Ósmosis Inversa 2", "running", 76),
-    ...rorack("A25-3", "Rack Ósmosis Inversa 3", "running", 71),
-    ...rorack("A25-4", "Rack Ósmosis Inversa 4", "running", 74),
+    // Salud calibrada para que foulFractionOf() (useTwinLive.ts) quede bajo el 15% del
+    // UCL en operación normal — antes (79/76/71/74) 3 de 4 racks ya arrancaban en o sobre
+    // el umbral, mostrando la serie de ensuciamiento "fuera de control" permanentemente.
+    // Orden relativo preservado: A25-3 sigue siendo el más degradado ("tren líder").
+    ...rorack("A25-1", "Rack Ósmosis Inversa 1", "running", 85),
+    ...rorack("A25-2", "Rack Ósmosis Inversa 2", "running", 82),
+    ...rorack("A25-3", "Rack Ósmosis Inversa 3", "running", 78),
+    ...rorack("A25-4", "Rack Ósmosis Inversa 4", "running", 80),
     { code: "A26", name: "Rack Recuperador de Energía (ERI)", kind: "eri", areaCode: "RO", category: "Energy Recovery",
       criticality: "high", status: "running", health: 90, runtime: 15000, manufacturer: "Energy Recovery", model: "PX-Q300",
       specs: { eficiencia: "96%" }, mimic: { x: 10, y: 0 }, primarySignal: "efficiency",

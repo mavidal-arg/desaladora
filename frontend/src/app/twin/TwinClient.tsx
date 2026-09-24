@@ -9,6 +9,7 @@ import { Model3DView } from "@/components/twin/Model3DView";
 import { SceneCanvas } from "@/components/twin/SceneCanvas";
 import { useSceneSignals, RO_SCENE_CONFIG } from "@/lib/useSceneSignals";
 import { useTwinLive, type TwinLive } from "@/lib/useTwinLive";
+import { LIVE_UNIFIED } from "@/lib/flags";
 import { PLANT } from "@/lib/plant-config";
 import { InfoTip } from "@/components/ui/info-tip";
 import { statusColor, CHART, CATEGORY_PALETTE } from "@/lib/status-colors";
@@ -231,12 +232,28 @@ export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
   });
   const secNow = secSeries.length ? Number(secSeries[secSeries.length - 1].agg) : liveSec;
 
-  // ── Serie SPC viva del tren seleccionado (Rf o TMP) con CL=base y UCL=base*(1+rise%) ──
-  const series = buf
-    .map((b) => ({ x: b.t, value: b.live[spcTrain] ? (spcMetric === "rf" ? b.live[spcTrain].rf.value : b.live[spcTrain].tmp.value) : 0 }))
-    .filter((p) => p.value > 0);
   const rise = 1 + thresholds.rfRisePct / 100;
-  const base = spcMetric === "rf" ? 3.0 : 54; // membrana/operación limpia de referencia
+  // Rf real: sigue la MISMA fuente que ya alimenta la serie en cada modo — el rfBase
+  // sembrado en BD (en unidades crudas, ÷1e13 igual que rf13()/api/twin/live) cuando hay
+  // dato real (LIVE_UNIFIED), o RF_CLEAN del simulador legacy si no. Antes era un 3.0 fijo
+  // también con LIVE_UNIFIED on, desalineado en dos sentidos del rfBase real (escala cruda
+  // ~6·10¹³ vs. la serie ya dividida a ~6-7): dejaba la serie permanentemente por encima
+  // del UCL, o los ticks del eje Y ilegibles si sólo se corregía la escala.
+  const selRack = racks.find((r) => r.code === spcTrain);
+  const base = spcMetric === "rf" ? (LIVE_UNIFIED ? (selRack?.rfBase ? selRack.rfBase / 1e13 : 3.0) : 3.0) : 54;
+  // ── Serie SPC viva del tren seleccionado (Rf o TMP) con CL=base y UCL=base*(1+rise%) ──
+  // Rf se reconstruye desde foulFrac (ya normalizado server-side contra el rfBase real de
+  // CADA tren) en vez de graficar el "rf" crudo sin corregir por temperatura: comparar el
+  // crudo contra un umbral derivado del normalizado subía la serie por encima del UCL aun
+  // en trenes sanos — mismo sesgo térmico en los 4, no un problema exclusivo del tren líder.
+  const series = buf
+    .map((b) => {
+      const live = b.live[spcTrain];
+      if (!live) return { x: b.t, value: 0 };
+      const value = spcMetric === "rf" ? base * (1 + live.foulFrac) : live.tmp.value;
+      return { x: b.t, value };
+    })
+    .filter((p) => p.value > 0);
   const ucl = base * rise;
   const lcl = spcMetric === "rf" ? base * 0.96 : base * 0.9;
   const cl = base;
