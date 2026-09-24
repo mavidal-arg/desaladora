@@ -42,7 +42,7 @@ function Param({ label, value, unit, tone }: { label: string; value: string | nu
 export function TrainDetailClient({ train, process, thresholds, windowDays }: {
   train: TrainOee; process: TrainProcess; thresholds: { target: number; acceptable: number; critical: number }; windowDays: number;
 }) {
-  const label = train.code.replace("A25-", "RO-");
+  const label = train.code;
   const band = oeeBand(train.oee, thresholds);
   const trend = oeeTrend7(train.code, train.oee);
 

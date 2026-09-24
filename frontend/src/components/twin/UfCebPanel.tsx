@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Info } from "lucide-react";
 import { StateBadge } from "@/components/mes";
 import {
   ComposedChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid,
   ResponsiveContainer, Tooltip as RTooltip,
 } from "recharts";
 import { SortableTable } from "@/components/SortableTable";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { InfoTip } from "@/components/ui/info-tip";
 import { statusColor, CHART } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
 import { UF_REGIME_LABELS, type UfSummary, type UfSkidRow } from "@/lib/twin-types";
@@ -37,19 +36,6 @@ const TREND_KEY: Record<UfSkidRow["trend"], string> = {
   critical: "falla",
 };
 
-function InfoTip({ children, label = "Explicación" }: { children: React.ReactNode; label?: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger type="button" className="text-muted-foreground transition-colors hover:text-[var(--accent)]" aria-label={label}>
-        <Info className="size-3.5" />
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="flex-col items-start gap-0 max-w-sm">
-        {children}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function Kpi({ label, value, unit, hint, accent, info }: {
   label: string; value: string | number; unit?: string; hint?: string; accent?: boolean; info?: React.ReactNode;
 }) {
@@ -57,7 +43,7 @@ function Kpi({ label, value, unit, hint, accent, info }: {
     <div className="rounded-xl border border-border bg-card p-3">
       <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground">
         {label}
-        {info && <InfoTip label={`Qué es ${label}`}>{info}</InfoTip>}
+        {info && <InfoTip srLabel={`Qué es ${label}`}>{info}</InfoTip>}
       </div>
       <div className={cn("mt-1 font-mono text-xl font-semibold tabular-nums", accent && "text-[var(--accent)]")}>
         {value}
@@ -83,13 +69,12 @@ export function UfCebPanel({ data }: { data: UfSummary }) {
   const cyclesTotal = skids.reduce((s, k) => s + k.cebCycles, 0);
 
   return (
-    <TooltipProvider delay={120}>
       <div className="space-y-4">
         {/* Qué es el CEB, y por qué no es un CIP */}
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-semibold">Régimen de regeneración: CEB</span>
-            <InfoTip label="Diferencia entre CEB y CIP">
+            <InfoTip srLabel="Diferencia entre CEB y CIP" side="bottom">
               <p className="text-xs font-semibold">CEB, CIP y preservación</p>
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
                 No son alternativos: son cosas distintas, y el plano de ingeniería las separa por clase de
@@ -157,7 +142,7 @@ export function UfCebPanel({ data }: { data: UfSummary }) {
                   Permeabilidad vs límite de control (CEB) — Skid{" "}
                   <span className="font-mono text-[var(--accent)]">{sel?.code ?? "—"}</span>
                 </span>
-                <InfoTip label="Cómo se lee el diente de sierra">
+                <InfoTip srLabel="Cómo se lee el diente de sierra" side="bottom">
                   <p className="text-xs font-semibold">El ciclo de CEB, visto</p>
                   <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
                     Cada tramo descendente es un ciclo de filtración: el módulo se ensucia y la
@@ -311,6 +296,5 @@ export function UfCebPanel({ data }: { data: UfSummary }) {
           </p>
         </div>
       </div>
-    </TooltipProvider>
   );
 }

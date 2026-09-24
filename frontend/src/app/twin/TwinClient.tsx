@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Info } from "lucide-react";
 import { AreaChart, Area, LineChart, Line, Legend, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { SPCChart, OEEGauge, StateBadge } from "@/components/mes";
 import { SortableTable } from "@/components/SortableTable";
@@ -11,7 +10,7 @@ import { SceneCanvas } from "@/components/twin/SceneCanvas";
 import { useSceneSignals, RO_SCENE_CONFIG } from "@/lib/useSceneSignals";
 import { useTwinLive, type TwinLive } from "@/lib/useTwinLive";
 import { PLANT } from "@/lib/plant-config";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { InfoTip } from "@/components/ui/info-tip";
 import { statusColor, CHART, CATEGORY_PALETTE } from "@/lib/status-colors";
 import { cn, apiUrl } from "@/lib/utils";
 import { UfCebPanel } from "@/components/twin/UfCebPanel";
@@ -38,29 +37,13 @@ const fmt = (v: number, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : "—");
 // Rf viene en 1/m crudo (contrato C2, p.ej. 8.8e13); se muestra en unidades de ×10¹³/m.
 const rf13 = (v: number, d = 2) => (Number.isFinite(v) ? (v / 1e13).toFixed(d) : "—");
 
-// Ícono de ayuda con tooltip explicativo (mismo patrón que el de SEC).
-function InfoTip({ text, label = "Explicación" }: { text: string; label?: string }) {
-  return (
-    <TooltipProvider delay={120}>
-      <Tooltip>
-        <TooltipTrigger type="button" className="text-muted-foreground hover:text-[var(--accent)]" aria-label={label}>
-          <Info className="size-3.5" />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs">
-          <p className="text-[11px] leading-snug">{text}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
 function Kpi({ label, value, unit, hint, accent, tone, info }: {
   label: string; value: string | number; unit?: string; hint?: string; accent?: boolean; tone?: "warn" | "crit"; info?: string;
 }) {
   const toneText = tone === "crit" ? "text-red-500" : tone === "warn" ? "text-amber-500" : accent ? "text-[var(--accent)]" : "";
   return (
     <div className="rounded-xl border border-border bg-card p-3">
-      <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground">{label}{info && <InfoTip text={info} label={`Qué es ${label}`} />}</div>
+      <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground">{label}{info && <InfoTip srLabel={`Qué es ${label}`}>{info}</InfoTip>}</div>
       <div className={cn("mt-1 font-mono text-xl font-semibold tabular-nums", toneText)}>
         {value}{unit && <span className="ml-0.5 text-xs font-normal text-muted-foreground">{unit}</span>}
       </div>
@@ -286,7 +269,7 @@ export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold">Métricas físicas — tren <span className="font-mono text-[var(--accent)]">{selected?.code ?? "—"}</span>
-            <InfoTip label="Qué es el tren líder" text="Tren líder = el rack de ósmosis inversa que primero alcanzará el umbral de limpieza (el de menor 'días para CIP'). Es el más avanzado en ensuciamiento; su serie alimenta el gráfico de ensuciamiento y marca cuándo será la próxima limpieza química (CIP) de la planta." />
+            <InfoTip srLabel="Qué es el tren líder">Tren líder = el rack de ósmosis inversa que primero alcanzará el umbral de limpieza (el de menor &apos;días para CIP&apos;). Es el más avanzado en ensuciamiento; su serie alimenta el gráfico de ensuciamiento y marca cuándo será la próxima limpieza química (CIP) de la planta.</InfoTip>
           </h2>
           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="inline-block size-1.5 animate-pulse rounded-full bg-[var(--accent)]" /> en vivo ~2,5 s · modelo van &apos;t Hoff / ASTM D4516
@@ -378,11 +361,14 @@ export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
 
         <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card p-3 lg:w-[220px]">
           <div className="mb-1 flex items-center gap-1.5 self-start text-sm font-semibold">Salud compuesta
-            <InfoTip label="Cómo se calcula la salud compuesta" text="Combina 3 ejes físicos del activo (0–100): A = integridad de la membrana (índice de salud), P = eficiencia energética (cuánto sube el SEC sobre su ideal), Q = rechazo de sales (polarización β). No es el OEE de producción: mide la salud del activo, no cuánto produce." />
+            <InfoTip srLabel="Cómo se calcula la salud compuesta">Combina 3 ejes físicos del activo (0–100): Int = integridad de la membrana (índice de salud), Ene = eficiencia energética (cuánto sube el SEC sobre su ideal), Sal = rechazo de sales (polarización β). No es el OEE de producción: mide la salud del activo, no cuánto produce.</InfoTip>
           </div>
-          <OEEGauge availability={integrity} performance={energyScore} quality={rejectionScore} size={180} />
+          <OEEGauge
+            availability={integrity} performance={energyScore} quality={rejectionScore}
+            centerLabel="Salud" legendLabels={["Int", "Ene", "Sal"]} size={180}
+          />
           <div className="mt-1 text-center text-[10px] text-muted-foreground">
-            A = integridad membrana · P = eficiencia energética · Q = rechazo de sales — tren {selected?.code ?? "—"}
+            Int = integridad membrana · Ene = eficiencia energética · Sal = rechazo de sales — tren {selected?.code ?? "—"}
           </div>
         </div>
       </div>
@@ -393,7 +379,7 @@ export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-sm font-semibold">
               Tendencia de ensuciamiento vs límite de control (CIP) — Tren <span className="font-mono text-[var(--accent)]">{spcTrain || "—"}</span>
-              <InfoTip label="Ensuciamiento vs límite de control" text="Rf = resistencia por ensuciamiento de la membrana; el TMP sube junto con él. La línea central (CL) es la membrana limpia (base) y la UCL es base + 15%. Cuando Rf o TMP cruzan la UCL se programa el CIP (limpieza química). Los puntos fuera de control se marcan en rojo." />
+              <InfoTip srLabel="Ensuciamiento vs límite de control">Rf = resistencia por ensuciamiento de la membrana; el TMP sube junto con él. La línea central (CL) es la membrana limpia (base) y la UCL es base + 15%. Cuando Rf o TMP cruzan la UCL se programa el CIP (limpieza química). Los puntos fuera de control se marcan en rojo.</InfoTip>
             </div>
             <div className="flex items-center gap-2">
               <select
@@ -472,19 +458,12 @@ export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
         <div className="mb-1 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-semibold">Consumo específico de energía (SEC) — planta · todos los trenes</span>
-            <TooltipProvider delay={120}>
-              <Tooltip>
-                <TooltipTrigger type="button" className="text-muted-foreground hover:text-[var(--accent)]" aria-label="Qué es SEC">
-                  <Info className="size-3.5" />
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs">
-                  <p className="text-xs font-semibold">SEC — Specific Energy Consumption</p>
-                  <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                    Energía neta consumida por cada m³ de permeado producido (kWh/m³), ya descontada la recuperación de energía del ERI. Es el KPI energético central de una desaladora de ósmosis inversa (SWRO): resume cuánta electricidad cuesta producir agua.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <InfoTip srLabel="Qué es SEC">
+              <p className="text-xs font-semibold">SEC — Specific Energy Consumption</p>
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                Energía neta consumida por cada m³ de permeado producido (kWh/m³), ya descontada la recuperación de energía del ERI. Es el KPI energético central de una desaladora de ósmosis inversa (SWRO): resume cuánta electricidad cuesta producir agua.
+              </p>
+            </InfoTip>
           </div>
           <div className="flex items-center gap-2">
             <span className="shrink-0 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-[var(--accent)]">

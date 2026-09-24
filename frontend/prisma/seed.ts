@@ -329,11 +329,11 @@ async function seedOee() {
 
   // Instancias de alerta (workflow activa → reconocida → resuelta)
   const alerts = [
-    { id: "alr01", ruleId: "rule_oee_crit", trainCode: "A25-3", level: "critico", status: "activa", message: "OEE Tren RO-3 bajo umbral crítico", d: -1, h: 6, ackBy: null, action: null },
-    { id: "alr02", ruleId: "rule_boron_high", trainCode: "A25-3", level: "critico", status: "reconocida", message: "Boro permeado 1.7 mg/l en Tren RO-3 (límite 1.5)", d: -3, h: 12, ackBy: "María Sosa", action: "Muestreo de verificación en curso; evaluando reemplazo de membranas" },
-    { id: "alr03", ruleId: "rule_cond_high", trainCode: "A25-3", level: "advertencia", status: "resuelta", message: "Conductividad 560 µS/cm en Tren RO-3", d: -7, h: 13, ackBy: "Ana Duarte", action: "Purga adicional; conductividad normalizada" },
-    { id: "alr04", ruleId: "rule_downtime_long", trainCode: "A25-3", level: "advertencia", status: "reconocida", message: "Parada de 900 min en Tren RO-3 (proceso)", d: -11, h: 18, ackBy: "María Sosa", action: "Ajuste de pretratamiento (SDI)" },
-    { id: "alr05", ruleId: "rule_oee_warn", trainCode: "A25-2", level: "advertencia", status: "activa", message: "OEE Tren RO-2 bajo umbral aceptable", d: 0, h: 8, ackBy: null, action: null },
+    { id: "alr01", ruleId: "rule_oee_crit", trainCode: "A25-3", level: "critico", status: "activa", message: "OEE Tren A25-3 bajo umbral crítico", d: -1, h: 6, ackBy: null, action: null },
+    { id: "alr02", ruleId: "rule_boron_high", trainCode: "A25-3", level: "critico", status: "reconocida", message: "Boro permeado 1.7 mg/l en Tren A25-3 (límite 1.5)", d: -3, h: 12, ackBy: "María Sosa", action: "Muestreo de verificación en curso; evaluando reemplazo de membranas" },
+    { id: "alr03", ruleId: "rule_cond_high", trainCode: "A25-3", level: "advertencia", status: "resuelta", message: "Conductividad 560 µS/cm en Tren A25-3", d: -7, h: 13, ackBy: "Ana Duarte", action: "Purga adicional; conductividad normalizada" },
+    { id: "alr04", ruleId: "rule_downtime_long", trainCode: "A25-3", level: "advertencia", status: "reconocida", message: "Parada de 900 min en Tren A25-3 (proceso)", d: -11, h: 18, ackBy: "María Sosa", action: "Ajuste de pretratamiento (SDI)" },
+    { id: "alr05", ruleId: "rule_oee_warn", trainCode: "A25-2", level: "advertencia", status: "activa", message: "OEE Tren A25-2 bajo umbral aceptable", d: 0, h: 8, ackBy: null, action: null },
   ];
   for (const a of alerts) {
     const ts = hm(a.d, a.h);

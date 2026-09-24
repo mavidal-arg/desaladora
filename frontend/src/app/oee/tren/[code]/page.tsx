@@ -12,7 +12,7 @@ export default async function TrainDetailPage({ params }: { params: Promise<{ co
   const train = summary.trains.find((t) => t.code === code);
   if (!train) notFound();
 
-  const label = train.code.replace("A25-", "RO-");
+  const label = train.code;
   return (
     <div>
       <PageHeader

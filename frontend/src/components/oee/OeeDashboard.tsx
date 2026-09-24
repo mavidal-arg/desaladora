@@ -6,6 +6,7 @@ import {
   Tooltip as RTooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import { OEEGauge, StateBadge } from "@/components/mes";
+import { InfoTip } from "@/components/ui/info-tip";
 import { CHART } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
 import { oeeBand, type OeeSummary } from "@/lib/oee-types";
@@ -50,7 +51,7 @@ function Bar3({ label, value, color }: { label: string; value: number; color: st
 export function OeeDashboard({ summary, productionTrend }: { summary: OeeSummary; productionTrend?: ProductionTrendPoint[] }) {
   const p = summary.plant;
   const th = summary.thresholds;
-  const trainBars = summary.trains.map((t) => ({ code: t.code.replace("A25-", "RO-"), oee: t.oee, band: oeeBand(t.oee, th) }));
+  const trainBars = summary.trains.map((t) => ({ code: t.code, oee: t.oee, band: oeeBand(t.oee, th) }));
   const loss = [
     { label: "Disponibilidad", value: summary.pillarLoss.availability },
     { label: "Rendimiento", value: summary.pillarLoss.performance },
@@ -73,9 +74,11 @@ export function OeeDashboard({ summary, productionTrend }: { summary: OeeSummary
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Gauge planta */}
         <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-2 text-sm font-semibold">OEE de planta</div>
+          <InfoTip label="OEE de planta" className="mb-2 text-sm font-semibold" srLabel="Cómo se calcula el OEE de planta">
+            OEE = Disponibilidad × Rendimiento × Calidad, agregado de los {p.trainsTotal} trenes sobre la ventana móvil de {summary.window.days} días.
+          </InfoTip>
           <OEEGauge availability={p.availability} performance={p.performance} quality={p.quality} oee={p.oee} size={190} />
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">Ventana móvil {summary.window.days} días · A × R × C</p>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">Ventana móvil {summary.window.days} días · D × R × C</p>
         </div>
 
         {/* OEE por tren */}
@@ -139,7 +142,7 @@ export function OeeDashboard({ summary, productionTrend }: { summary: OeeSummary
               className="rounded-lg border border-border p-3 transition-colors hover:border-[var(--accent)] hover:bg-muted/40"
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono text-sm font-semibold">{t.code.replace("A25-", "RO-")}</span>
+                <span className="font-mono text-sm font-semibold">{t.code}</span>
                 <StateBadge state={t.status} size="sm" />
               </div>
               <div className="my-2 flex items-baseline gap-1">
@@ -147,7 +150,7 @@ export function OeeDashboard({ summary, productionTrend }: { summary: OeeSummary
                 <span className="text-xs text-muted-foreground">% OEE</span>
               </div>
               <div className="space-y-1">
-                <Bar3 label="A" value={t.availability} color={ACCENT} />
+                <Bar3 label="D" value={t.availability} color={ACCENT} />
                 <Bar3 label="R" value={t.performance} color="#71717a" />
                 <Bar3 label="C" value={t.quality} color="#27272a" />
               </div>

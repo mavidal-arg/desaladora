@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Atom, ArrowUpRight, Info } from "lucide-react";
+import { Atom, ArrowUpRight } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip as ChartTooltip, ResponsiveContainer, Legend } from "recharts";
 import { StatCard, Section, Empty } from "@/components/uikit";
 import { SortableTable } from "@/components/SortableTable";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { InfoTip } from "@/components/ui/info-tip";
 import { statusColor, CHART } from "@/lib/status-colors";
 import { esTrend } from "@/lib/labels";
 import { signalLabel, signalDesc } from "@/lib/signal-labels";
@@ -26,20 +27,6 @@ function maintKind(p: PredictiveProfile): string {
   return "acción predictiva por condición";
 }
 
-// Info-tooltip reutilizable para encabezados de tabla (patrón del mímico).
-function HeaderTip({ label, tip }: { label: string; tip: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      {label}
-      <Tooltip>
-        <TooltipTrigger type="button" className="text-[var(--muted-foreground)] transition-colors hover:text-[var(--accent)]" aria-label={`Ayuda: ${label}`}>
-          <Info className="h-3 w-3" aria-hidden="true" />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs normal-case">{tip}</TooltipContent>
-      </Tooltip>
-    </span>
-  );
-}
 
 // B1: conteo de parámetros en anomalía como badge (0 gris · 1 ámbar · ≥2 rojo).
 function CountBadge({ n }: { n: number }) {
@@ -156,7 +143,7 @@ export function PredictiveClient({ predictive }: { predictive: PredictiveProfile
           columns={[
             { key: "code", header: "Código", sortAccessor: (a) => a.code, render: (a) => a.code },
             { key: "name", header: "Equipo", sortAccessor: (a) => a.name, render: (a) => a.name },
-            { key: "param", header: <HeaderTip label="Parámetro" tip="Parámetro (señal) del equipo cuyo valor se encuentra fuera de rango." />, sortAccessor: (a) => signalLabel(a.param), render: (a) => {
+            { key: "param", header: <InfoTip label="Parámetro" contentClassName="normal-case">Parámetro (señal) del equipo cuyo valor se encuentra fuera de rango.</InfoTip>, sortAccessor: (a) => signalLabel(a.param), render: (a) => {
               const desc = signalDesc(a.param);
               return desc ? (
                 <Tooltip>
@@ -179,10 +166,10 @@ export function PredictiveClient({ predictive }: { predictive: PredictiveProfile
           columns={[
             { key: "code", header: "Código", sortAccessor: (p) => p.assetCode, render: (p) => p.assetCode },
             { key: "name", header: "Nombre", sortAccessor: (p) => p.assetName, render: (p) => p.assetName },
-            { key: "health", header: <HeaderTip label="Índice de salud" tip="Condición del equipo (0-100) derivada de sus señales. Para racks RO se calcula del ensuciamiento (Rf normalizado), rechazo de sales y ΔP transmembrana. Bandas: ≥85 saludable · 70-84 advertencia · <70 crítico." />, align: "right", sortAccessor: (p) => p.healthScore, render: (p) => <span style={{ color: bandHex(band(p.healthScore)) }}>{p.healthScore}%</span> },
+            { key: "health", header: <InfoTip label="Índice de salud" contentClassName="normal-case">Condición del equipo (0-100) derivada de sus señales. Para racks RO se calcula del ensuciamiento (Rf normalizado), rechazo de sales y ΔP transmembrana. Bandas: ≥85 saludable · 70-84 advertencia · &lt;70 crítico.</InfoTip>, align: "right", sortAccessor: (p) => p.healthScore, render: (p) => <span style={{ color: bandHex(band(p.healthScore)) }}>{p.healthScore}%</span> },
             { key: "trend", header: "Tendencia", sortAccessor: (p) => esTrend(p.trend), render: (p) => esTrend(p.trend) },
             { key: "fail", header: "Falla prevista", align: "right", sortAccessor: (p) => p.predFailureDays ?? null, render: (p) => p.predFailureDays ? `${p.predFailureDays} días` : "—" },
-            { key: "anom", header: <HeaderTip label="Parámetros en anomalía" tip="Cantidad de parámetros del equipo fuera de rango." />, align: "right", sortAccessor: (p) => p.anomalies.length, render: (p) => <CountBadge n={p.anomalies.length} /> },
+            { key: "anom", header: <InfoTip label="Parámetros en anomalía" contentClassName="normal-case">Cantidad de parámetros del equipo fuera de rango.</InfoTip>, align: "right", sortAccessor: (p) => p.anomalies.length, render: (p) => <CountBadge n={p.anomalies.length} /> },
           ]}
         />
         {/* B3: leyenda de bandas de salud (consistente con el donut de distribución). */}

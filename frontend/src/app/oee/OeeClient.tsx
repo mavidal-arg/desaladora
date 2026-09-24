@@ -128,7 +128,7 @@ function ParadasTab({ role, rows, shifts, onChange, send }: {
       </div>
       {open && canLog && (
         <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
-          <Field label="Tren"><select className={inputCls} value={f.trainCode} onChange={(e) => setF({ ...f, trainCode: e.target.value })}>{RO_TRAINS.map((c) => <option key={c} value={c}>{c.replace("A25-", "RO-")}</option>)}</select></Field>
+          <Field label="Tren"><select className={inputCls} value={f.trainCode} onChange={(e) => setF({ ...f, trainCode: e.target.value })}>{RO_TRAINS.map((c) => <option key={c} value={c}>{c}</option>)}</select></Field>
           <Field label="Tipo"><select className={inputCls} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>{Object.entries(DOWNTIME_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
           <Field label="Categoría"><select className={inputCls} value={f.cause} onChange={(e) => setCause(e.target.value)}>{Object.entries(DOWNTIME_CAUSE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
           <Field label="Causa raíz">
@@ -154,7 +154,7 @@ function ParadasTab({ role, rows, shifts, onChange, send }: {
         initialSort={{ key: "start", dir: "desc" }}
         emptyText="Sin paradas registradas."
         columns={[
-          { key: "train", header: "Tren", sortAccessor: (d) => d.trainCode, render: (d) => <span className="font-mono">{d.trainCode.replace("A25-", "RO-")}</span> },
+          { key: "train", header: "Tren", sortAccessor: (d) => d.trainCode, render: (d) => <span className="font-mono">{d.trainCode}</span> },
           { key: "type", header: "Tipo", sortAccessor: (d) => DOWNTIME_TYPE_LABELS[d.type as keyof typeof DOWNTIME_TYPE_LABELS] ?? d.type, render: (d) => DOWNTIME_TYPE_LABELS[d.type as keyof typeof DOWNTIME_TYPE_LABELS] ?? d.type },
           { key: "cause", header: "Categoría", sortAccessor: (d) => DOWNTIME_CAUSE_LABELS[d.cause as keyof typeof DOWNTIME_CAUSE_LABELS] ?? d.cause, render: (d) => DOWNTIME_CAUSE_LABELS[d.cause as keyof typeof DOWNTIME_CAUSE_LABELS] ?? d.cause },
           { key: "subCause", header: "Causa raíz", sortAccessor: (d) => (d.subCause ? SUBCAUSE_BY_CODE[d.subCause]?.label ?? d.subCause : "zz"), render: (d) => d.subCause
@@ -201,7 +201,7 @@ function CalidadTab({ role, rows, onChange, send }: {
       </div>
       {open && canLog && (
         <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3 lg:grid-cols-6">
-          <Field label="Tren"><select className={inputCls} value={f.trainCode} onChange={(e) => setF({ ...f, trainCode: e.target.value })}>{RO_TRAINS.map((c) => <option key={c} value={c}>{c.replace("A25-", "RO-")}</option>)}</select></Field>
+          <Field label="Tren"><select className={inputCls} value={f.trainCode} onChange={(e) => setF({ ...f, trainCode: e.target.value })}>{RO_TRAINS.map((c) => <option key={c} value={c}>{c}</option>)}</select></Field>
           <Field label="Conductividad µS/cm"><input className={inputCls} value={f.conductivity} onChange={(e) => setF({ ...f, conductivity: e.target.value })} /></Field>
           <Field label="SDT mg/l"><input className={inputCls} value={f.tds} onChange={(e) => setF({ ...f, tds: e.target.value })} /></Field>
           <Field label="pH"><input className={inputCls} value={f.ph} onChange={(e) => setF({ ...f, ph: e.target.value })} /></Field>
@@ -216,7 +216,7 @@ function CalidadTab({ role, rows, onChange, send }: {
         initialSort={{ key: "date", dir: "desc" }}
         emptyText="Sin mediciones registradas."
         columns={[
-          { key: "train", header: "Tren", sortAccessor: (q) => q.trainCode, render: (q) => <span className="font-mono">{q.trainCode.replace("A25-", "RO-")}</span> },
+          { key: "train", header: "Tren", sortAccessor: (q) => q.trainCode, render: (q) => <span className="font-mono">{q.trainCode}</span> },
           { key: "date", header: "Fecha", sortAccessor: (q) => new Date(q.ts).getTime(), render: (q) => <span className="tabular-nums">{dt(q.ts)}</span> },
           { key: "cond", header: "Cond.", align: "right", sortAccessor: (q) => q.conductivity, render: (q) => <span className={cn("tabular-nums", q.conductivity > QUALITY_LIMITS.conductivityMax && "text-red-600")}>{q.conductivity}</span> },
           { key: "tds", header: "SDT", align: "right", sortAccessor: (q) => q.tds, render: (q) => <span className={cn("tabular-nums", q.tds > QUALITY_LIMITS.tdsMax && "text-red-600")}>{q.tds}</span> },
@@ -306,7 +306,7 @@ function AlertasTab({ role, alerts, rules, onAlerts, onRules, send }: {
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 text-[11px] text-muted-foreground">
               <span className="tabular-nums">{dt(a.ts)}</span>
-              {a.trainCode && <span className="font-mono">{a.trainCode.replace("A25-", "RO-")}</span>}
+              {a.trainCode && <span className="font-mono">{a.trainCode}</span>}
               {a.ackBy && <span>Rec.: {a.ackBy}</span>}
               {a.actionTaken && <span className="italic">“{a.actionTaken}”</span>}
             </div>
@@ -330,7 +330,7 @@ function AlertasTab({ role, alerts, rules, onAlerts, onRules, send }: {
             </div>
             <div className="mt-1 text-[11px] text-muted-foreground">
               {ALERT_METRIC_LABELS[r.metric] ?? r.metric} {r.op === "lt" ? "<" : ">"} {r.threshold}
-              {r.trainCode ? ` · ${r.trainCode.replace("A25-", "RO-")}` : " · todos"}
+              {r.trainCode ? ` · ${r.trainCode}` : " · todos"}
             </div>
             <div className="mt-2 flex items-center gap-2">
               <span className={cn("text-[11px]", r.enabled ? "text-green-600" : "text-muted-foreground")}>{r.enabled ? "Habilitada" : "Deshabilitada"}</span>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Atom, ArrowUpRight } from "lucide-react";
 import { StateBadge } from "@/components/mes";
 import { SortableTable } from "@/components/SortableTable";
+import { InfoTip } from "@/components/ui/info-tip";
 import { OeeClient } from "@/app/oee/OeeClient";
 import { statusColor } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
@@ -26,8 +27,16 @@ function Kpi({ label, value, unit, hint, accent }: { label: string; value: strin
   );
 }
 
-/** Tabla de salud de un grupo de membranas, con su régimen de regeneración. */
-function MembraneCard({ title, rows, nota }: { title: string; rows: MembraneRow[]; nota: React.ReactNode }) {
+/**
+ * Tabla de salud de un grupo de membranas, con su régimen de regeneración.
+ *
+ * `saludInfo` va SOLO en el tooltip del header de la columna "Salud" — antes
+ * era un footnote de texto permanente debajo de la tabla, fácil de no ver.
+ * Va sin el link a Gemelo Digital que traía ese texto (la tarjeta ya tiene su
+ * propio botón arriba): ningún otro tooltip del repo mete contenido
+ * interactivo/enfocable dentro de un popover que se cierra al mover el mouse.
+ */
+function MembraneCard({ title, rows, saludInfo }: { title: string; rows: MembraneRow[]; saludInfo: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-card p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -48,7 +57,7 @@ function MembraneCard({ title, rows, nota }: { title: string; rows: MembraneRow[
           { key: "regime", header: "Régimen", sortAccessor: (m) => m.regime, render: (m) => (
             <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{m.regime}</span>
           ) },
-          { key: "health", header: "Salud", sortAccessor: (m) => m.health, render: (m) => {
+          { key: "health", header: <InfoTip label="Salud" srLabel="Cómo se calcula la salud">{saludInfo}</InfoTip>, sortAccessor: (m) => m.health, render: (m) => {
             const c = m.health >= 85 ? statusColor("en_rango") : m.health >= 72 ? statusColor("fuera_rango") : statusColor("falla");
             return (
               <div className="flex items-center gap-2">
@@ -62,7 +71,6 @@ function MembraneCard({ title, rows, nota }: { title: string; rows: MembraneRow[
           { key: "status", header: "Estado", sortAccessor: (m) => m.status, render: (m) => <StateBadge state={m.status} /> },
         ]}
       />
-      <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{nota}</p>
     </div>
   );
 }
@@ -118,12 +126,12 @@ export function PanelPrincipalClient({
         <MembraneCard
           title="Ósmosis Inversa — régimen CIP"
           rows={membranes.filter((m) => m.regime === "CIP")}
-          nota={<>La salud combina ensuciamiento (ΔP transmembrana), caída de rechazo y horas de operación; el <Link href="/twin" className="text-[var(--accent)] hover:underline">Gemelo Digital</Link> la calcula con el modelo físico (Rf normalizado, SEC, β) y proyecta los <strong>días hasta el próximo CIP</strong> — limpieza química recirculada desde el estanque A28.</>}
+          saludInfo={<>La salud combina ensuciamiento (ΔP transmembrana), caída de rechazo y horas de operación; el Gemelo Digital la calcula con el modelo físico (Rf normalizado, SEC, β) y proyecta los <strong>días hasta el próximo CIP</strong> — limpieza química recirculada desde el estanque A28.</>}
         />
         <MembraneCard
           title="Ultrafiltración — régimen CEB"
           rows={membranes.filter((m) => m.regime === "CEB")}
-          nota={<>La UF no se regenera con CIP sino con <strong>CEB</strong> (retrolavado con reactivo inyectado en línea a cada skid, bomba A19 + estanque BW/CEB de 283 m³). Su indicador de ciclo es la permeabilidad (flux / TMP), y el <Link href="/twin" className="text-[var(--accent)] hover:underline">Gemelo Digital</Link> proyecta las <strong>horas hasta el próximo CEB</strong> — un ciclo de horas, no de semanas.</>}
+          saludInfo={<>La UF no se regenera con CIP sino con <strong>CEB</strong> (retrolavado con reactivo inyectado en línea a cada skid, bomba A19 + estanque BW/CEB de 283 m³). Su indicador de ciclo es la permeabilidad (flux / TMP), y el Gemelo Digital proyecta las <strong>horas hasta el próximo CEB</strong> — un ciclo de horas, no de semanas.</>}
         />
       </div>
     </div>

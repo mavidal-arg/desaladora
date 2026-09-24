@@ -30,6 +30,24 @@ interface OEEGaugeProps {
   /** Width & height in pixels. Default 200. */
   size?: number;
   className?: string;
+  /**
+   * Texto bajo el valor central. Default "OEE".
+   *
+   * Este gauge se reusa para métricas que NO son OEE de producción (p.ej. la
+   * "salud compuesta" de Twin, que combina integridad de membrana + eficiencia
+   * energética + rechazo de sales). Sin este prop, el centro siempre decía
+   * "OEE" sin importar qué se le pasara — el mismo tren mostraba "30% OEE" en
+   * Panel Principal y "36% OEE" en Twin, dos métricas distintas con el mismo
+   * nombre. Default preserva el comportamiento de los call sites que sí son OEE real.
+   */
+  centerLabel?: string;
+  /**
+   * Letras de la leyenda de los 3 anillos, en orden [availability, performance, quality].
+   * Default ["D","R","C"] (Disponibilidad/Rendimiento/Calidad) — el desglose de OEE se
+   * muestra en español en el resto de la app (KPIs, `Bar3`); las siglas en inglés
+   * "A/P/Q" quedaban sólo acá, sin ningún llamador real que las necesitara.
+   */
+  legendLabels?: [string, string, string];
 }
 
 function ring(value: number, color: string) {
@@ -46,7 +64,10 @@ export function OEEGauge({
   oee: oeeProp,
   size = 200,
   className,
+  centerLabel = "OEE",
+  legendLabels = ["D", "R", "C"],
 }: OEEGaugeProps) {
+  const [l1, l2, l3] = legendLabels;
   // El cálculo local queda sólo para llamadores que no tengan el agregado.
   const oee = oeeProp ?? Math.round((availability * performance * quality) / 10000);
   const trackColor = "#f4f4f5"; // gray-100
@@ -89,15 +110,15 @@ export function OEEGauge({
       {/* Center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-2xl font-semibold">{oee}%</span>
-        <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">OEE</span>
+        <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">{centerLabel}</span>
       </div>
       </div>
 
       {/* Legend */}
       <div className="mt-2 flex justify-center gap-3 text-[10px]">
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--accent)]" />A {availability}%</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#71717a]" />P {performance}%</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#27272a]" />Q {quality}%</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--accent)]" />{l1} {availability}%</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#71717a]" />{l2} {performance}%</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#27272a]" />{l3} {quality}%</span>
       </div>
     </div>
   );
