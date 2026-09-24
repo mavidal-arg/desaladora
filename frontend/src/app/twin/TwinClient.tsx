@@ -309,20 +309,20 @@ export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
           {selected?.code === lead?.code && <span className="text-[10px] text-muted-foreground">★ tren líder (próximo CIP)</span>}
           <button
             onClick={() => setCompareOpen((v) => !v)}
-            className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--foreground)]"
+            className="ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/50 bg-[var(--accent)]/10 px-2 py-1 text-[11px] font-medium text-[var(--accent)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent)]/20"
             aria-expanded={compareOpen}
           >
             {compareOpen ? "Ocultar comparación" : "Comparar los 4 trenes"}
           </button>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-          <Kpi label="π osmótica Δπ" value={fmt(m?.piOsmotic ?? 0, 1)} unit="bar" hint="van 't Hoff" />
+          <Kpi label="π osmótica Δπ" value={fmt(m?.piOsmotic ?? 0, 1)} unit="bar" hint="van 't Hoff" info="Presión osmótica diferencial (Δπ): la contrapresión que genera la diferencia de salinidad entre el lado concentrado y el permeado, calculada con la ley de van 't Hoff. Se resta de la TMP para obtener el NDP." />
           <Kpi label="TMP" value={fmt(liveTmp, 1)} unit="bar" hint="transmembrana" info="Presión transmembrana: caída de presión a través de la membrana. Sube a medida que la membrana se ensucia, así que es un indicador directo de cuán sucia está." />
-          <Kpi label="NDP" value={fmt(liveNdp, 1)} unit="bar" hint="TMP − Δπ" />
-          <Kpi label="Rf fouling" value={rf13(liveRf)} unit="×10¹³/m" tone={lead?.trend === "critical" ? "crit" : lead?.trend === "rising" ? "warn" : undefined} accent />
-          <Kpi label="Rf norm." value={rf13(m?.rfNorm ?? 0)} unit="×10¹³/m" hint="a 25 °C ref" />
+          <Kpi label="NDP" value={fmt(liveNdp, 1)} unit="bar" hint="TMP − Δπ" info="Net Driving Pressure: la presión que realmente empuja el permeado a través de la membrana, una vez descontada la contrapresión osmótica (NDP = TMP − Δπ). Es el número que de verdad mueve el agua, no la TMP sola." />
+          <Kpi label="Rf fouling" value={rf13(liveRf)} unit="×10¹³/m" tone={lead?.trend === "critical" ? "crit" : lead?.trend === "rising" ? "warn" : undefined} accent info="Resistencia de ensuciamiento (Rf) cruda: tal como se mide ahora, sin corregir por la temperatura actual del agua. Sube con el ensuciamiento de la membrana." />
+          <Kpi label="Rf norm." value={rf13(m?.rfNorm ?? 0)} unit="×10¹³/m" hint="a 25 °C ref" info="La misma resistencia de ensuciamiento (Rf), normalizada a 25 °C según ASTM D4516. Corrige el efecto de la temperatura del agua para poder comparar el ensuciamiento entre trenes o entre días distintos sin ese sesgo." />
           <Kpi label="SEC" value={fmt(liveSec, 2)} unit="kWh/m³" hint="neto con ERI" accent info="Consumo específico de energía: electricidad neta por m³ de permeado (kWh/m³), ya descontada la recuperación del ERI. Es el KPI energético central de la desaladora; sube con el ensuciamiento." />
-          <Kpi label="β polarización" value={fmt(m?.beta ?? 0, 3)} tone={m && m.beta > 1.15 ? "warn" : undefined} hint="alerta > 1,15" />
+          <Kpi label="β polarización" value={fmt(m?.beta ?? 0, 3)} tone={m && m.beta > 1.15 ? "warn" : undefined} hint="alerta > 1,15" info="Factor de polarización por concentración: cuánto se concentra el soluto pegado a la superficie de la membrana respecto al caudal general. Valores altos aceleran el ensuciamiento; por eso se dispara una alerta por encima de 1,15." />
         </div>
       </div>
 
