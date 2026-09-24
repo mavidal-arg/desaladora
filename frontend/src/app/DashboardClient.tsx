@@ -4,7 +4,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useRouter } from "next/navigation";
 import { Boxes, Activity, ClipboardList, HeartPulse, Package } from "lucide-react";
 import { StatCard, AlertCard, Section } from "@/components/uikit";
-import { esEquipStatus, esWoStatus } from "@/lib/labels";
+import { esEquipStatus, esWoStatus, esEquipCategory, esPartCategory } from "@/lib/labels";
 import type { DashboardModel } from "@/lib/metrics";
 
 const PALETTE = ["#4CAF50", "#38bdf8", "#f59e0b", "#a78bfa", "#34d399", "#fb7185", "#94a3b8", "#22d3ee"];
@@ -53,6 +53,8 @@ export function DashboardClient({ model }: { model: DashboardModel }) {
   ) => rows.map((d) => ({ name: es(d.name), value: d.value, raw: d.name }));
   const woRows = traducir(model.woStatusDist, esWoStatus);
   const eqRows = traducir(model.statusDist, esEquipStatus);
+  const partsRows = traducir(model.partsConsumption, esPartCategory);
+  const typeRows = traducir(model.equipmentTypes, esEquipCategory);
   const crudoDe = (rows: { name: string; raw: string }[], label: string) =>
     rows.find((r) => r.name === label)?.raw ?? label;
   const woTotal = model.woStatusDist.reduce((s, d) => s + d.value, 0);
@@ -89,10 +91,10 @@ export function DashboardClient({ model }: { model: DashboardModel }) {
           <Donut data={woRows} onSliceClick={(n) => router.push(`/maintenance?status=${encodeURIComponent(crudoDe(woRows, n))}`)} />
         </Section>
         <Section title="Consumo de repuestos">
-          <Donut data={model.partsConsumption} onSliceClick={() => router.push("/spare-parts")} />
+          <Donut data={partsRows} onSliceClick={() => router.push("/spare-parts")} />
         </Section>
         <Section title="Tipos de equipo">
-          <Donut data={model.equipmentTypes} onSliceClick={(n) => router.push(`/equipment?category=${encodeURIComponent(n)}`)} />
+          <Donut data={typeRows} onSliceClick={(n) => router.push(`/equipment?category=${encodeURIComponent(crudoDe(typeRows, n))}`)} />
         </Section>
       </div>
     </div>

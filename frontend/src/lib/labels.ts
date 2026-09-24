@@ -50,7 +50,10 @@ export const esEquipCategory = map({
   "Paper Machines": "Máquinas", Compressors: "Compresores", "Storage Tanks": "Tanques",
   "Electrical Equipment": "Equipo eléctrico", Debarkers: "Descortezadores", Chippers: "Astilladores",
   Conveyors: "Cintas transportadoras", Digesters: "Digestores", Washers: "Lavadores",
-  Screens: "Clasificadores", Reactors: "Reactores", Agitators: "Agitadores",
+  Screens: "Rejas", Reactors: "Reactores", Agitators: "Agitadores",
+  "Marine Intake": "Captación marina", Filters: "Filtros", Mixers: "Mezcladores",
+  "Energy Recovery": "Recuperación de energía", Contactors: "Contactores",
+  Dosing: "Dosificación", "Marine Discharge": "Descarga marina", Membranes: "Membranas",
 });
 
 // Cualquier categoría (repuesto o equipo)

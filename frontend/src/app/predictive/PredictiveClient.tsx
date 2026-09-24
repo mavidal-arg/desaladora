@@ -87,7 +87,14 @@ export function PredictiveClient({ predictive }: { predictive: PredictiveProfile
           </div>
         </Section>
 
-        <Section title="Equipos con menor salud">
+        <Section
+          title="Equipos con menor salud"
+          right={
+            <InfoTip srLabel="Qué es el índice de salud" contentClassName="normal-case">
+              Condición del equipo (0-100) derivada de sus señales. Para racks RO se calcula del ensuciamiento (Rf normalizado), rechazo de sales y ΔP transmembrana. Bandas: ≥85 saludable · 70-84 advertencia · &lt;70 crítico.
+            </InfoTip>
+          }
+        >
           <ol className="space-y-2">
             {lowest.map((p, i) => (
               <li key={p.assetId} className="flex items-center gap-3">
