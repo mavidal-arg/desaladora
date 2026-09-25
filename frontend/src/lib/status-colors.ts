@@ -33,6 +33,13 @@ export const STATUS_COLORS: Record<string, StatusColor> = {
   // ── Calidad / condición ──
   pass: mk("Aprobado", G), fail: mk("Rechazado", R), failed: mk("Falla", R), rejected: mk("Rechazado", R),
   en_rango: mk("En rango", G), fuera_rango: mk("Fuera de rango", A), falla: mk("Falla", R), otros: mk("Otros", N),
+  // ── Ensuciamiento de membranas (gemelo digital) ──
+  // Claves propias, aparte de en_rango/fuera_rango/falla, porque describen otra
+  // cosa: una membrana sucia NO es un equipo en falla — está operativa y produce,
+  // sólo pide un CIP. Reusar el vocabulario de estado hacía que el Modelo 3D de un
+  // clon recién creado se leyera como una planta rota (lo reportó Eduardo sobre el
+  // clon de Redabast). Mismos colores, otras palabras.
+  limpio: mk("Limpio", G), proximo_cip: mk("Próximo a CIP", A), cip_vencido: mk("CIP vencido", R),
   warning: mk("Advertencia", A), blocked: mk("Bloqueado", R),
   // ── Severidad / salud ──
   low: mk("Baja", N), medium: mk("Media", A), high: mk("Alta", R), critical: mk("Crítica", R),
@@ -43,6 +50,9 @@ export const STATUS_COLORS: Record<string, StatusColor> = {
   available: mk("Disponible", G), in_use: mk("En uso", A),
   // ── No conformidad ──
   in_review: mk("En revisión", A),
+  // Resultado del tratamiento (NonConformity.treatmentOutcome) — separado de
+  // `status`: "closed" ya dice que se cerró, esto dice CÓMO se cerró.
+  resolved: mk("Resuelto", G), false_positive: mk("Falso positivo", N),
 };
 
 const FALLBACK: StatusColor = mk("—", N);

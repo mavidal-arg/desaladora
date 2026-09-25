@@ -1,49 +1,55 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Search, Eye, Plus } from "lucide-react";
+import { Search, Eye } from "lucide-react";
 import { StateBadge } from "@/components/mes";
 import { FilterChip } from "@/components/uikit";
 import { SortableTable } from "@/components/SortableTable";
-import type { Equipment } from "@/lib/adapters/types";
+import type { Equipment, NonConformity } from "@/lib/adapters/types";
 import { Asset360Modal } from "./Asset360Modal";
 import { esEquipCategory } from "@/lib/labels";
-import { can } from "@/lib/permissions";
-import { apiUrl } from "@/lib/utils";
 
 type Area = { code: string; name: string };
 
 const inputCls = "rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
-const STATUS_OPTS = [["running", "En marcha"], ["idle", "En espera"], ["maintenance", "En mantenimiento"], ["stopped", "Detenido"]] as const;
-const CRIT_OPTS = [["low", "Baja"], ["medium", "Media"], ["high", "Alta"], ["critical", "Crítica"]] as const;
+
+const SEV_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 export function EquipmentExplorer({
-  equipment, areas, areaByCode, role, initialStatus, initialCategory,
+  equipment, areas, areaByCode, initialStatus, initialCategory, ncs = [], role = "Lector",
 }: {
   equipment: Equipment[];
   areas: Area[];
   areaByCode: Record<string, string>;
-  role: string;
   initialStatus?: string;
   initialCategory?: string;
+  /** Hallazgos abiertos, para el badge de la columna "Hallazgos" — no filtra la tabla. */
+  ncs?: NonConformity[];
+  role?: string;
 }) {
-  const router = useRouter();
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = useState<"Resumen" | "SOP">("Resumen");
   const [statusFilter, setStatusFilter] = useState(initialStatus ?? "");
   const [categoryFilter, setCategoryFilter] = useState(initialCategory ?? "");
   const [areaFilter, setAreaFilter] = useState("");
 
-  const canCreate = can(role, "edit_equipment");
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const emptyForm = { code: "", name: "", category: "", areaCode: areas[0]?.code ?? "", model: "", manufacturer: "", criticality: "medium", status: "running" };
-  const [form, setForm] = useState(emptyForm);
-
   const areaName = (code: string) => areas.find((a) => a.code === code)?.name ?? code;
   const categories = useMemo(() => Array.from(new Set(equipment.map((e) => e.category))).sort(), [equipment]);
+
+  // Abiertos/en revisión por equipo, con la severidad más alta — lo que hoy
+  // sólo se veía entrando a la ficha (pestaña SOP) ya se resume en la tabla.
+  const findingsByEquipment = useMemo(() => {
+    const m = new Map<string, { count: number; maxSeverity: string }>();
+    for (const n of ncs) {
+      if (n.status === "closed") continue;
+      const cur = m.get(n.assetId);
+      if (!cur) { m.set(n.assetId, { count: 1, maxSeverity: n.severity }); continue; }
+      cur.count += 1;
+      if ((SEV_RANK[n.severity] ?? 9) < (SEV_RANK[cur.maxSeverity] ?? 9)) cur.maxSeverity = n.severity;
+    }
+    return m;
+  }, [ncs]);
 
   const counts = useMemo(() => ({
     total: equipment.length,
@@ -62,31 +68,6 @@ export function EquipmentExplorer({
       return true;
     });
   }, [equipment, q, statusFilter, categoryFilter, areaFilter, areaByCode]);
-
-  const submit = async () => {
-    if (!form.code.trim() || !form.name.trim() || !form.category.trim()) {
-      toast.error("Código, nombre y categoría son obligatorios");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch(apiUrl("/api/assets"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { toast.error(data.error ?? "No se pudo crear el equipo"); return; }
-      toast.success(`Equipo ${form.code} creado`);
-      setShowForm(false);
-      setForm(emptyForm);
-      router.refresh();
-    } catch {
-      toast.error("Error de red");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
@@ -123,36 +104,7 @@ export function EquipmentExplorer({
         {statusFilter && <FilterChip label={statusFilter} onClear={() => setStatusFilter("")} />}
         {categoryFilter && <FilterChip label={categoryFilter} onClear={() => setCategoryFilter("")} />}
         <span className="text-xs text-[var(--muted-foreground)]">{filtered.length} items</span>
-        {canCreate && (
-          <button
-            onClick={() => setShowForm((v) => !v)}
-            className="ml-auto inline-flex items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-medium text-white"
-          >
-            <Plus className="h-4 w-4" /> {showForm ? "Cerrar" : "Agregar equipo"}
-          </button>
-        )}
       </div>
-
-      {/* Formulario de alta */}
-      {showForm && canCreate && (
-        <div className="mb-4 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Código *"><input className={inputCls} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="A99" /></Field>
-          <Field label="Nombre *"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Bomba de alta presión 3" /></Field>
-          <Field label="Categoría *">
-            <input className={inputCls} list="eq-categories" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Bombas" />
-            <datalist id="eq-categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
-          </Field>
-          <Field label="Área"><select className={inputCls} value={form.areaCode} onChange={(e) => setForm({ ...form, areaCode: e.target.value })}>{areas.map((a) => <option key={a.code} value={a.code}>{a.name}</option>)}</select></Field>
-          <Field label="Fabricante"><input className={inputCls} value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} /></Field>
-          <Field label="Modelo"><input className={inputCls} value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} /></Field>
-          <Field label="Criticidad"><select className={inputCls} value={form.criticality} onChange={(e) => setForm({ ...form, criticality: e.target.value })}>{CRIT_OPTS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
-          <Field label="Estado"><select className={inputCls} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{STATUS_OPTS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
-          <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
-            <button onClick={submit} disabled={saving} className="rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60">{saving ? "Guardando…" : "Guardar equipo"}</button>
-            <button onClick={() => { setShowForm(false); setForm(emptyForm); }} className="rounded-md border border-[var(--border)] px-4 py-1.5 text-sm">Cancelar</button>
-          </div>
-        </div>
-      )}
 
       {/* Table */}
       <SortableTable
@@ -168,9 +120,26 @@ export function EquipmentExplorer({
           { key: "model", header: "Modelo", sortAccessor: (e) => e.model, render: (e) => <span className="text-[var(--muted-foreground)]">{e.model}</span> },
           { key: "location", header: "Ubicación", sortAccessor: (e) => e.location, render: (e) => e.location },
           { key: "status", header: "Estado", sortAccessor: (e) => e.status, render: (e) => <StateBadge state={e.status} size="sm" /> },
+          {
+            key: "findings", header: "Hallazgos",
+            sortAccessor: (e) => findingsByEquipment.get(e.id)?.count ?? 0,
+            render: (e) => {
+              const f = findingsByEquipment.get(e.id);
+              if (!f) return <span className="text-[var(--muted-foreground)]">—</span>;
+              return (
+                <button
+                  onClick={() => { setSelectedTab("SOP"); setSelected(e.id); }}
+                  aria-label={`Tratar hallazgos de ${e.code}`}
+                  className="eam-focus rounded"
+                >
+                  <StateBadge state={f.maxSeverity} label={`${f.count} abierto${f.count > 1 ? "s" : ""}`} size="sm" />
+                </button>
+              );
+            },
+          },
           { key: "actions", header: "", align: "right", render: (e) => (
             <button
-              onClick={() => setSelected(e.id)}
+              onClick={() => { setSelectedTab("Resumen"); setSelected(e.id); }}
               aria-label={`Ver ficha de ${e.code}`}
               className="eam-focus rounded-md p-1.5 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--accent)]"
             >
@@ -180,14 +149,11 @@ export function EquipmentExplorer({
         ]}
       />
 
-      {selected && <Asset360Modal assetId={selected} onClose={() => setSelected(null)} />}
+      {selected && <Asset360Modal assetId={selected} onClose={() => setSelected(null)} role={role} initialTab={selectedTab} />}
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="flex flex-col gap-1 text-[11px] text-[var(--muted-foreground)]">{label}{children}</label>;
-}
 
 function SummaryCard({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (

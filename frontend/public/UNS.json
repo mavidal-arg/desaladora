@@ -1,4 +1,5 @@
 {
+  "_note": "Documentacion de integracion, NO autoritativo. La fuente de verdad de las senales en modo sim es src/lib/plant-config.ts (instrumento) + src/lib/twin-types.ts (virtuales del gemelo); el valor 'vivo' lo resuelve src/lib/live-signals.ts. Ninguna linea de la app lee este archivo.",
   "version": "v1",
   "site": "DPCQ01",
   "description": "Unified Namespace de la Desaladora Coquimbo (osmosis inversa). Southbound (metric/state): SCADA/PLC + motor fisico -> app. Northbound (action/info): app -> mantenimiento/CIP externo. El Gemelo Digital es hibrido: Node-RED transporta la telemetria cruda al UNS, el motor Python (twin_engine.py --compute) calcula el contrato C1, y el bridge persiste en Postgres (PiReading/ProductionLog). En modo demo la app lee el seed narrativo; en real estos topics mapean a MQTT/Tier0.",

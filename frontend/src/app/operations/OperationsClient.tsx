@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { StatCard, Section, Empty, fmtDateTime } from "@/components/uikit";
 import { SortableTable } from "@/components/SortableTable";
 import { StateBadge } from "@/components/mes";
 import { TabBar } from "@/components/TabBar";
+import { FindingTreatDialog } from "@/components/FindingTreatDialog";
+import { can } from "@/lib/permissions";
 import type { Equipment, NonConformity } from "@/lib/adapters/types";
 import { esEquipCategory } from "@/lib/labels";
 
@@ -14,15 +18,24 @@ const SEV_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low:
 const TABS = ["Horas de marcha", "Gestión de corrosión", "Gestión de sellado"];
 const TAB_FROM_PARAM: Record<string, string> = { corrosion: "Gestión de corrosión", sealing: "Gestión de sellado" };
 
-export function OperationsClient({ equipment, ncs, initialTab }: { equipment: Equipment[]; ncs: NonConformity[]; initialTab?: string }) {
+export function OperationsClient({ equipment, ncs, initialTab, role = "Lector" }: {
+  equipment: Equipment[]; ncs: NonConformity[]; initialTab?: string; role?: string;
+}) {
   const [tab, setTab] = useState((initialTab && TAB_FROM_PARAM[initialTab]) || TABS[0]);
+  const [rows, setRows] = useState(ncs);
+  const [treating, setTreating] = useState<NonConformity | null>(null);
+  const canTreat = can(role, "close_nc");
   const total = equipment.length || 1;
   const utilization = Math.round((equipment.filter((e) => e.status === "running").length / total) * 1000) / 10;
-  const critical = ncs.filter((n) => n.severity === "critical" && n.status !== "closed").length;
-  const warning = ncs.filter((n) => n.severity === "high" && n.status !== "closed").length;
-  const corrosion = ncs.filter((n) => /corro/i.test(n.description));
-  const sealing = ncs.filter((n) => /sell|seal|fuga|leak/i.test(n.description));
+  const critical = rows.filter((n) => n.severity === "critical" && n.status !== "closed").length;
+  const warning = rows.filter((n) => n.severity === "high" && n.status !== "closed").length;
+  const corrosion = rows.filter((n) => /corro/i.test(n.description));
+  const sealing = rows.filter((n) => /sell|seal|fuga|leak/i.test(n.description));
   const minorLeak = sealing.filter((n) => n.severity === "low" || n.severity === "medium").length;
+
+  const applyTreated = (updated: NonConformity) => {
+    setRows((prev) => prev.map((n) => (n.id === updated.id ? { ...n, ...updated } : n)));
+  };
 
   const chartData = [...equipment].filter((e) => e.runtimeHours > 0).sort((a, b) => b.runtimeHours - a.runtimeHours).slice(0, 8)
     .map((e) => ({ name: e.code, hours: e.runtimeHours }));
@@ -35,6 +48,13 @@ export function OperationsClient({ equipment, ncs, initialTab }: { equipment: Eq
         <StatCard label="Advertencia" value={warning} />
         <StatCard label="Fuga menor" value={minorLeak} />
       </div>
+
+      <Link
+        href="/hallazgos"
+        className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
+      >
+        Ver sumario de hallazgos <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
@@ -70,13 +90,20 @@ export function OperationsClient({ equipment, ncs, initialTab }: { equipment: Eq
         </div>
       )}
 
-      {tab === "Gestión de corrosión" && <NcTable items={corrosion} empty="Sin hallazgos de corrosión." />}
-      {tab === "Gestión de sellado" && <NcTable items={sealing} empty="Sin hallazgos de sellado." />}
+      {tab === "Gestión de corrosión" && <NcTable items={corrosion} empty="Sin hallazgos de corrosión." onTreat={setTreating} canTreat={canTreat} />}
+      {tab === "Gestión de sellado" && <NcTable items={sealing} empty="Sin hallazgos de sellado." onTreat={setTreating} canTreat={canTreat} />}
+
+      {treating && (
+        <FindingTreatDialog nc={treating} canTreat={canTreat} onClose={() => setTreating(null)}
+          onTreated={(u) => { applyTreated(u); setTreating(null); }} />
+      )}
     </div>
   );
 }
 
-function NcTable({ items, empty }: { items: NonConformity[]; empty: string }) {
+function NcTable({ items, empty, onTreat, canTreat }: {
+  items: NonConformity[]; empty: string; onTreat: (n: NonConformity) => void; canTreat: boolean;
+}) {
   if (items.length === 0) return <Empty text={empty} />;
   return (
     <SortableTable
@@ -95,6 +122,14 @@ function NcTable({ items, empty }: { items: NonConformity[]; empty: string }) {
             : <span className="text-[var(--muted-foreground)]">sistema</span>,
         },
         { key: "raised", header: "Reportada", sortAccessor: (n) => new Date(n.raisedAt).getTime(), render: (n) => fmtDateTime(n.raisedAt) },
+        { key: "actions", header: "", align: "right", render: (n) => (
+          <button
+            onClick={() => onTreat(n)}
+            className="rounded-md border border-[var(--border)] px-2.5 py-1 text-xs hover:bg-[var(--muted)]"
+          >
+            {canTreat ? "Tratar" : "Ver log"}
+          </button>
+        ) },
       ]}
     />
   );

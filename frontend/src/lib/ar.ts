@@ -1,9 +1,12 @@
 import { pi, sap } from "@/lib/adapters";
-import { PLANT, eqId, areaByCode, type SignalDef } from "@/lib/plant-config";
+import { eqId, type SignalDef } from "@/lib/plant-config";
+import { getPlantConfig } from "@/lib/plant-config-store";
 import { signalLabel, signalDesc } from "@/lib/signal-labels";
 import { RO_TRAINS } from "@/lib/oee-types";
 import { getTwinSummary } from "@/lib/desal";
 import { getAssetHealth } from "@/lib/asset-health";
+import { getLiveSignals } from "@/lib/live-signals";
+import { LIVE_UNIFIED } from "@/lib/flags";
 import { getOeeSummary } from "@/lib/oee";
 import type { TwinRackRow, TwinIdealVsReal } from "@/lib/twin-types";
 import type { TrainOee } from "@/lib/oee-types";
@@ -63,34 +66,62 @@ export async function getAssetArView(code: string): Promise<ArView | null> {
   const eq = await sap.getEquipment(id);
   if (!eq) return null;
 
-  const cfg = PLANT.equipment.find((e) => e.code === code);
+  // De la config vigente, no de la constante compilada: si el cliente renombró
+  // un área o cambió la instrumentación de un equipo, el QR tiene que mostrar
+  // eso y no lo que traía el template.
+  const planta = await getPlantConfig();
+  const cfg = planta.equipment.find((e) => e.code === code);
   const defBySignal = new Map<string, SignalDef>((cfg?.signals ?? []).map((s) => [s.signal, s]));
   const area = cfg?.areaCode ?? "—";
-  const areaName = areaByCode[area]?.name ?? area;
+  const areaName = planta.areas.find((a) => a.code === area)?.name ?? area;
 
   // La salud sale de la fuente única, no de la columna del catálogo: el QR de un
   // rack RO tiene que mostrar lo mismo que el Panel principal.
-  const [current, health] = await Promise.all([pi.getCurrentValues(id), getAssetHealth()]);
+  //
+  // Con la fuente única activa el valor sale de `getLiveSignals` (determinista,
+  // el MISMO que ve el gemelo y la ficha); si no, del adapter PI (seed sinusoidal
+  // + jitter cliente en `ArAssetView`).
+  const [current, live, health] = await Promise.all([
+    LIVE_UNIFIED ? Promise.resolve([]) : pi.getCurrentValues(id),
+    LIVE_UNIFIED ? getLiveSignals(code) : Promise.resolve([]),
+    getAssetHealth(),
+  ]);
+
   // Mostrar solo las señales instrumentadas reales (las definidas en plant-config).
   // En racks RO esto excluye las señales virtuales del twin (rf/rfNorm/ndp/…),
   // que ya se resumen en el bloque "físico vs proceso".
-  const relevant = defBySignal.size ? current.filter((v) => defBySignal.has(v.signal)) : current;
-  const signals: ArSignal[] = relevant.map((v) => {
-    const def = defBySignal.get(v.signal);
-    return {
-      signal: v.signal,
-      label: signalLabel(v.signal) !== v.signal ? signalLabel(v.signal) : def?.label ?? v.signal,
-      desc: signalDesc(v.signal),
-      unit: v.unit || def?.unit || "",
-      value: v.value,
-      ts: new Date(v.ts).toISOString(),
-      quality: v.quality ?? "good",
-      min: def?.min,
-      max: def?.max,
-      primary: v.signal === cfg?.primarySignal,
-      severity: severityOf(v.value, def),
-    };
-  });
+  const signals: ArSignal[] = LIVE_UNIFIED
+    ? live
+        .filter((s) => (defBySignal.size ? defBySignal.has(s.signal) : s.kind === "instrument"))
+        .map((s) => ({
+          signal: s.signal,
+          label: s.label,
+          desc: s.desc,
+          unit: s.unit,
+          value: s.value,
+          ts: s.ts,
+          quality: "good",
+          min: s.min,
+          max: s.max,
+          primary: s.signal === cfg?.primarySignal,
+          severity: s.severity,
+        }))
+    : (defBySignal.size ? current.filter((v) => defBySignal.has(v.signal)) : current).map((v) => {
+        const def = defBySignal.get(v.signal);
+        return {
+          signal: v.signal,
+          label: signalLabel(v.signal) !== v.signal ? signalLabel(v.signal) : def?.label ?? v.signal,
+          desc: signalDesc(v.signal),
+          unit: v.unit || def?.unit || "",
+          value: v.value,
+          ts: new Date(v.ts).toISOString(),
+          quality: v.quality ?? "good",
+          min: def?.min,
+          max: def?.max,
+          primary: v.signal === cfg?.primarySignal,
+          severity: severityOf(v.value, def),
+        };
+      });
   // Señal primaria primero, luego las que están fuera de banda, luego el resto.
   const sevRank = { out: 0, warn: 1, ok: 2 } as const;
   signals.sort((a, b) =>
@@ -113,8 +144,11 @@ export async function getAssetArView(code: string): Promise<ArView | null> {
     const rack = twin.racks.find((r) => r.code === code);
     if (rack) {
       view.ro = {
+        // El contraste es del rack ESCANEADO, no del tren líder: antes el QR de
+        // A25-2 mostraba el ideal-vs-real de A25-1 porque `idealVsReal` sólo se
+        // calculaba para el líder.
         rack,
-        idealVsReal: twin.idealVsReal,
+        idealVsReal: rack.idealVsReal ?? twin.idealVsReal,
         oee: oee.trains.find((t) => t.code === code),
       };
     }

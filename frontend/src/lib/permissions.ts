@@ -14,6 +14,8 @@ export type Action =
   | "view_predictive"
   | "view_analytics"
   | "view_oee"
+  | "view_alertas"
+  | "view_hallazgos"
   // oee / eficiencia RO
   | "log_downtime"
   | "validate_downtime"
@@ -44,6 +46,7 @@ export type Action =
 const ALL_ACTIONS: Action[] = [
   "view_dashboard", "view_equipment", "view_maintenance", "view_spare_parts",
   "view_operations", "view_inspection", "view_predictive", "view_analytics", "view_oee",
+  "view_alertas", "view_hallazgos",
   "log_downtime", "validate_downtime", "log_quality", "manage_shifts",
   "manage_alert_rules", "ack_alert", "raise_observation",
   "edit_equipment", "view_costs", "create_wo", "assign_wo", "transition_wo",
@@ -54,6 +57,7 @@ const ALL_ACTIONS: Action[] = [
 const VIEW_ACTIONS: Action[] = [
   "view_dashboard", "view_equipment", "view_maintenance", "view_spare_parts",
   "view_operations", "view_inspection", "view_predictive", "view_analytics", "view_oee",
+  "view_alertas", "view_hallazgos",
 ];
 
 export const PERMISSION_MATRIX: Record<string, Action[]> = {

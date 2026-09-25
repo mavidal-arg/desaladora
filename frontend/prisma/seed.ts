@@ -2,7 +2,8 @@ import "dotenv/config";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { PLANT, flId, eqId } from "../src/lib/plant-config";
+import { PLANT, eqId, normalizar, type PlantConfig } from "../src/lib/plant-config";
+import { materializar } from "../src/lib/materializar";
 
 const pool = new Pool({
   connectionString:
@@ -14,6 +15,21 @@ const adapter = new PrismaPg(pool as any);
 const prisma = new PrismaClient({ adapter });
 
 // Deterministic "now" so the seed is reproducible across restarts.
+// ─────────────────────────────────────────────────────────────────────────────
+// La planta que se siembra sale de la BASE, no de la constante.
+//
+// `PLANT` es sólo la semilla de una base vacía. Una vez que existe la fila
+// `PlantConfig` —porque la escribió la fábrica al clonar, o porque el cliente
+// editó su planta en Administración— esa fila manda, y la constante compilada
+// deja de tener voz. Sin esto, cada arranque del contenedor volvía a sembrar las
+// 20 tablas con el plantel del template y le pisaba al cliente lo que hubiera
+// editado.
+//
+// `main()` la reasigna antes de tocar nada; las funciones de abajo la leen en el
+// momento de la llamada, ya reasignada.
+// ─────────────────────────────────────────────────────────────────────────────
+let CFG: PlantConfig = PLANT;
+
 const NOW = new Date("2026-06-15T12:00:00Z");
 const day = (n: number) => new Date(NOW.getTime() + n * 86400000);
 // Deterministic pseudo-random in [0,1) from an integer seed.
@@ -26,36 +42,36 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 const hashInt = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 
 async function main() {
-  console.log(`Seeding ${PLANT.plant.name} (${PLANT.plant.code})…`);
+  // La fila vigente manda; la constante es sólo el respaldo de una base vacía.
+  const guardada = await prisma.plantConfig.findUnique({ where: { id: "singleton" } });
+  CFG = guardada?.data
+    ? normalizar(guardada.data as unknown as Partial<PlantConfig>)
+    : PLANT;
+  console.log(
+    `Seeding ${CFG.plant.name} (${CFG.plant.code}) — config ${guardada ? "de la base" : "del template"}…`,
+  );
 
-  // ─── Functional locations (site + areas from plant-config) ───
-  await upsertFL({ id: PLANT.plant.id, code: PLANT.plant.code, name: PLANT.plant.name, area: "Planta", criticality: "critical", parentId: null });
-  for (const a of PLANT.areas) {
-    await upsertFL({ id: flId(a.code), code: a.code, name: a.name, area: a.short, criticality: a.criticality, parentId: PLANT.plant.id });
-  }
+  // ─── Ubicaciones funcionales, equipos y señales ───
+  // Proyección de la config sobre las tablas. Vive en `src/lib/materializar.ts`
+  // porque también la llaman la Administración y el alta de equipos: si esto
+  // siguiera acá adentro, editar la planta cambiaría el JSON y no las tablas.
+  const proy = await materializar(prisma, CFG, { fecha: NOW });
+  console.log(
+    `  ${proy.areas} áreas, ${proy.equipos} equipos, ${proy.senales} señales.` +
+      (proy.dadosDeBaja.length ? ` Equipos fuera de la config: ${proy.dadosDeBaja.join(", ")}.` : "") +
+      (proy.areasBorradas.length ? ` Áreas borradas: ${proy.areasBorradas.join(", ")}.` : "") +
+      (proy.areasHuerfanas.length ? ` Áreas que quedan por tener equipos de baja: ${proy.areasHuerfanas.join(", ")}.` : ""),
+  );
 
-  // ─── Equipment + signals + 14 daily readings (from plant-config) ───
-  for (const e of PLANT.equipment) {
+  // ─── Lecturas históricas (14 días por señal) ───
+  // Datos de demo derivados, no estructura: por eso quedan acá y no en la
+  // proyección. Un equipo agregado en caliente tiene su señal desde el momento
+  // en que se guarda, y su historia recién en el próximo arranque.
+  for (const e of CFG.equipment) {
     const id = eqId(e.code);
-    await prisma.equipment.upsert({
-      where: { id },
-      update: { status: e.status, healthIndex: e.health, runtimeHours: e.runtime, specs: e.specs, category: e.category, name: e.name },
-      create: {
-        id, code: e.code, name: e.name, functionalLocationId: flId(e.areaCode), category: e.category,
-        location: `${areaName(e.areaCode)} — ${e.name}`,
-        manufacturer: e.manufacturer, model: e.model, serialNumber: `${e.manufacturer.slice(0, 2).toUpperCase()}-${1000 + (hashInt(e.code) % 9000)}`,
-        installDate: day(-1200), commissionDate: day(-1160), warrantyExpiry: day(160),
-        specs: e.specs, criticality: e.criticality, status: e.status, healthIndex: e.health, runtimeHours: e.runtime,
-      },
-    });
     let si = 0;
     for (const s of e.signals) {
       const sigId = `sig_${id}_${s.signal}`;
-      await prisma.piSignal.upsert({
-        where: { id: sigId },
-        update: { unit: s.unit },
-        create: { id: sigId, equipmentId: id, signal: s.signal, unit: s.unit },
-      });
       for (let i = 13; i >= 0; i--) {
         const ts = day(-i);
         const value = round2(s.base + s.amp * Math.sin(i + si) + s.amp * 0.5 * (rnd(hashInt(sigId) + i * 7) - 0.5) * 2);
@@ -68,11 +84,12 @@ async function main() {
 
   // ─── Predictive profiles (1:1) ───
   const trendOf = (h: number) => (h < 70 ? "declining" : h < 85 ? "down" : "up");
-  for (const e of PLANT.equipment) {
+  for (const e of CFG.equipment) {
     const id = eqId(e.code);
     const configured = !["pile", "tank", "silo"].includes(e.kind);
     // Equipos con salud baja → anomalía sobre su primera señal + posible falla predicha.
-    const anomalies = e.health < 78 ? [{ param: e.signals[e.signals.length - 1].signal, value: round2(e.signals[e.signals.length - 1].base * 1.3), delta: round2(e.signals[e.signals.length - 1].amp * 1.5) }] : [];
+    const ultima = e.signals[e.signals.length - 1];
+    const anomalies = ultima && e.health < 78 ? [{ param: ultima.signal, value: round2(ultima.base * 1.3), delta: round2(ultima.amp * 1.5) }] : [];
     await prisma.predictiveProfile.upsert({
       where: { equipmentId: id },
       update: { configured, healthScore: e.health, trend: trendOf(e.health), anomalies, predFailureDays: e.health < 68 ? 20 + (hashInt(e.code) % 20) : null },
@@ -83,7 +100,7 @@ async function main() {
   // ─── Work Orders (derivados: mantenimiento/predictivo según estado/salud) ───
   const assignees = ["Rodrigo Fuentes", "Patricia Rojas", "Carlos Ferreyra", "Ana Duarte", "Luis Cortés", null];
   let woN = 0;
-  for (const e of PLANT.equipment) {
+  for (const e of CFG.equipment) {
     const id = eqId(e.code);
     const specs: Array<{ type: string; status: string; priority: string; assIdx: number; opened: number; due: number | null; closed: number | null; est: number; act: number | null; desc: string }> = [];
     if (e.status === "maintenance") specs.push({ type: "corrective", status: "in_progress", priority: "high", assIdx: 2, opened: -5, due: 2, closed: null, est: 4200, act: null, desc: `${e.code} Intervención correctiva — parada de mantenimiento` });
@@ -108,7 +125,7 @@ async function main() {
   // ─── Maintenance plans (uno por equipo crítico/alto, subset) ───
   const strategies = [["monthly", "Mensual"], ["runtime", "Cada 2000 h"], ["daily", "Diario"], ["predictive", "Por condición"]] as const;
   let mpN = 0;
-  for (const e of PLANT.equipment) {
+  for (const e of CFG.equipment) {
     if (!["critical", "high"].includes(e.criticality)) continue;
     if (hashInt(e.code) % 3 === 2) continue; // subset
     mpN++;
@@ -119,14 +136,14 @@ async function main() {
       create: {
         id: `mp_${eqId(e.code)}`, equipmentId: eqId(e.code), strategy: st[0], intervalLabel: st[1],
         nextDueAt: day(1 + (hashInt(e.code) % 20)),
-        taskList: ["Inspección general", `Chequeo de ${e.signals[0].label.toLowerCase()}`, "Lubricación / limpieza según aplique"],
+        taskList: ["Inspección general", e.signals[0] ? `Chequeo de ${e.signals[0].label.toLowerCase()}` : "Chequeo funcional", "Lubricación / limpieza según aplique"],
       },
     });
   }
   console.log(`  ${woN} work orders, ${mpN} maintenance plans.`);
 
   // ─── Spare parts (para equipos rotativos) ───
-  const rotating = PLANT.equipment.filter((e) => ["pump", "fan", "chipper", "debarker", "conveyor", "turbogen"].includes(e.kind));
+  const rotating = CFG.equipment.filter((e) => ["pump", "fan", "chipper", "debarker", "conveyor", "turbogen"].includes(e.kind));
   let spN = 0;
   const partKinds = [["Sello mecánico", "Seals", 320], ["Rodamiento", "Bearings", 210], ["Correa", "Belts", 95], ["Filtro", "Filters", 60]] as const;
   for (const e of rotating) {
@@ -160,7 +177,7 @@ async function main() {
   for (const t of tools) await prisma.tool.upsert({ where: { id: t[0] }, update: { available: t[4] }, create: { id: t[0], code: t[0], name: t[1], toolRoom: t[2], storageLocation: t[3], available: t[4] } });
 
   // ─── SE Suite documents (SOP + P&ID + safety para equipos clave) ───
-  const docEq = PLANT.equipment.filter((e) => ["critical", "high"].includes(e.criticality)).slice(0, 8);
+  const docEq = CFG.equipment.filter((e) => ["critical", "high"].includes(e.criticality)).slice(0, 8);
   let dcN = 0;
   for (const e of docEq) {
     dcN++;
@@ -186,19 +203,19 @@ async function main() {
 
   // ─── Non-conformities (equipos en mantenimiento o baja salud) ───
   let ncN = 0;
-  for (const e of PLANT.equipment.filter((x) => x.status === "maintenance" || x.health < 75)) {
+  for (const e of CFG.equipment.filter((x) => x.status === "maintenance" || x.health < 75)) {
     ncN++;
     await prisma.nonConformity.upsert({
       where: { id: `nc_${eqId(e.code)}` }, update: {},
-      create: { id: `nc_${eqId(e.code)}`, code: `NC-2026-${String(ncN).padStart(3, "0")}`, equipmentId: eqId(e.code), severity: e.health < 68 ? "critical" : e.health < 75 ? "high" : "medium", description: `${e.name}: desviación detectada en ${e.signals[e.signals.length - 1].label.toLowerCase()}`, status: e.status === "maintenance" ? "in_review" : "open", raisedAt: day(-2 - (hashInt(e.code) % 8)) },
+      create: { id: `nc_${eqId(e.code)}`, code: `NC-2026-${String(ncN).padStart(3, "0")}`, equipmentId: eqId(e.code), severity: e.health < 68 ? "critical" : e.health < 75 ? "high" : "medium", description: `${e.name}: desviación detectada en ${e.signals[e.signals.length - 1]?.label.toLowerCase() ?? "su condición"}`, status: e.status === "maintenance" ? "in_review" : "open", raisedAt: day(-2 - (hashInt(e.code) % 8)) },
     });
   }
   console.log(`  ${spN} spare parts, ${dcN} documents, ${ncN} non-conformities.`);
 
   // ─── Inspection routes (patrol / special / measuring) — genérico, sin asumir tipos ───
-  const lineEq = PLANT.equipment.filter((e) => ["INTK", "UF", "RO"].includes(e.areaCode)).slice(0, 4).map((e) => eqId(e.code));
-  const pressureEq = PLANT.equipment.filter((e) => e.kind === "ro_rack" || e.category === "Pumps").slice(0, 3).map((e) => eqId(e.code));
-  const anyEq = PLANT.equipment[0] ? [eqId(PLANT.equipment[0].code)] : [];
+  const lineEq = CFG.equipment.filter((e) => ["INTK", "UF", "RO"].includes(e.areaCode)).slice(0, 4).map((e) => eqId(e.code));
+  const pressureEq = CFG.equipment.filter((e) => e.kind === "ro_rack" || e.category === "Pumps").slice(0, 3).map((e) => eqId(e.code));
+  const anyEq = CFG.equipment[0] ? [eqId(CFG.equipment[0].code)] : [];
   await prisma.inspectionRoute.upsert({
     where: { id: "ir_001" }, update: { nextInspectionAt: day(1), code: "PR-LINE-DAILY", name: "Ronda Diaria Línea de Agua", inspector: "Luis Cortés" },
     create: { id: "ir_001", code: "PR-LINE-DAILY", name: "Ronda Diaria Línea de Agua", category: "patrol", frequency: "daily", nextInspectionAt: day(1), inspector: "Luis Cortés", equipmentIds: lineEq,
@@ -218,23 +235,20 @@ async function main() {
       tasks: [{ date: day(-32).toISOString(), inspector: "Inspector C", status: "completed", startedAt: "10:00" }] },
   });
 
-  // ─── Plant config editable (singleton) ───
-  // Preserva ediciones del Admin DENTRO de la misma versión de template; si el
-  // template por defecto sube de versión, re-siembra el singleton con el nuevo default.
-  {
-    const existing = await prisma.plantConfig.findUnique({ where: { id: "singleton" } });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const storedVersion = (existing?.data as any)?.version ?? 0;
-    if (!existing || storedVersion < PLANT.version) {
-      await prisma.plantConfig.upsert({
-        where: { id: "singleton" },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        update: { data: PLANT as any },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        create: { id: "singleton", data: PLANT as any },
-      });
-      console.log(`  PlantConfig singleton sembrado a v${PLANT.version}.`);
-    }
+  // ─── Config de planta (singleton) ───
+  // Se CREA si no hay ninguna; nunca se pisa una existente.
+  //
+  // Antes esto re-sembraba cuando `storedVersion < PLANT.version`, y era la peor
+  // trampa del repo: como el seed corre en CADA arranque, subir `version` en el
+  // template le borraba al cliente su identidad y su planta en el próximo
+  // `docker restart`. Con la config viniendo de la base, la comparación de
+  // versiones ya no tiene para qué existir: si hay fila, esa es la planta.
+  if (!guardada) {
+    await prisma.plantConfig.create({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: { id: "singleton", data: PLANT as any },
+    });
+    console.log(`  PlantConfig sembrado desde el template (v${PLANT.version}).`);
   }
 
   // ─── Gemelo Digital — señales virtuales (fouling → CIP) por rack RO ───
@@ -324,8 +338,23 @@ async function seedOee() {
     { id: "rule_cond_high", name: "Conductividad permeado alta", metric: "conductivity", op: "gt", threshold: 500, level: "advertencia", enabled: true, trainCode: null },
     { id: "rule_boron_high", name: "Boro fuera de spec", metric: "boron", op: "gt", threshold: 1.5, level: "critico", enabled: true, trainCode: null },
     { id: "rule_downtime_long", name: "Parada prolongada (>6 h)", metric: "downtime", op: "gt", threshold: 360, level: "advertencia", enabled: true, trainCode: null },
+    // Gemelo Digital: RUL hasta el próximo lavado. Éstas son las reglas reales
+    // que faltaban para /api/twin/cip-alert y /api/twin/ceb-alert — no son
+    // sintéticas, son el motor de alertas cerrando sobre datos que ya existían.
+    { id: "rule_cip_critical", name: "CIP inminente", metric: "cip_days", op: "lt", threshold: 7, level: "critico", enabled: true, trainCode: null },
+    { id: "rule_ceb_warning", name: "CEB próximo", metric: "ceb_hours", op: "lt", threshold: 4, level: "advertencia", enabled: true, trainCode: null },
   ];
   for (const r of rules) await prisma.alertRule.upsert({ where: { id: r.id }, update: r, create: r });
+
+  // Política severidad→canales — mismos valores que tenía LEVEL_CHANNELS
+  // hardcodeado, para no cambiar comportamiento el día que esto se despliega.
+  // No se pisa si ya existe: un admin pudo haber tocado esto desde /alertas.
+  const channelRules = [
+    { level: "critico", email: true, whatsapp: true, voice: true },
+    { level: "advertencia", email: true, whatsapp: true, voice: false },
+    { level: "info", email: false, whatsapp: false, voice: false },
+  ];
+  for (const c of channelRules) await prisma.alertChannelRule.upsert({ where: { level: c.level }, update: {}, create: c });
 
   // Instancias de alerta (workflow activa → reconocida → resuelta)
   const alerts = [
@@ -588,7 +617,7 @@ async function seedUf() {
 }
 
 async function seedDesal(twinAgg?: Map<number, { rfAvg: number; secComputed: number; tmpAvg: number; cipDays: number }>) {
-  const phase = (PLANT.flags?.phase as number) ?? 1;
+  const phase = (CFG.flags?.phase as number) ?? 1;
   // Producto objetivo Fase 1 ≈ 990 m³/h → ~23.760 m³/día; recovery ~45%; kWh/m³ ~3.1 con ERI.
   const baseProd = phase >= 2 ? 34000 : 23760;
   // Ventana alargada a TWIN_DAYS para acompañar la serie del gemelo (t: 0..TWIN_DAYS-1, t=59=HOY).
@@ -621,12 +650,6 @@ async function seedDesal(twinAgg?: Map<number, { rfAvg: number; secComputed: num
     });
   }
   console.log(`  Desal: ${n} días de producción (Fase ${phase})${twinAgg ? " + rollup gemelo" : ""}.`);
-}
-
-function areaName(code: string) { return PLANT.areas.find((a) => a.code === code)?.name ?? code; }
-
-async function upsertFL(f: { id: string; code: string; name: string; area: string; criticality: string; parentId: string | null }) {
-  await prisma.functionalLocation.upsert({ where: { id: f.id }, update: { name: f.name, criticality: f.criticality }, create: f });
 }
 
 main()

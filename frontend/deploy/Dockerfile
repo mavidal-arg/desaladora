@@ -13,6 +13,10 @@ COPY . .
 # el código (ver deploy/clone.sh y el asistente de Administración).
 ARG BASE_PATH=/desaladora-coquimbo-v2-ops
 ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
+# Fuente única de valores de señal + snapshot de observación. OFF por default
+# (Coquimbo V2); ON en el build de Iquique (ver deploy/compose.aguas-del-norte-*).
+ARG LIVE_SIGNALS_UNIFIED=0
+ENV NEXT_PUBLIC_LIVE_SIGNALS_UNIFIED=$LIVE_SIGNALS_UNIFIED
 RUN npx prisma generate && npm run build
 
 FROM node:20-bookworm-slim AS runtime
@@ -21,6 +25,8 @@ ENV NODE_ENV=production
 # Los ARG no cruzan de una etapa a otra: hay que volver a declararlo acá.
 ARG BASE_PATH=/desaladora-coquimbo-v2-ops
 ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
+ARG LIVE_SIGNALS_UNIFIED=0
+ENV NEXT_PUBLIC_LIVE_SIGNALS_UNIFIED=$LIVE_SIGNALS_UNIFIED
 ENV PORT=3000
 # Standalone server (includes a trimmed node_modules)…
 COPY --from=build /app/.next/standalone ./

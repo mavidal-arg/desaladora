@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PLANT, type EquipmentDef } from "@/lib/plant-config";
+import type { EquipmentDef } from "@/lib/plant-config";
 import type { LiveValue } from "@/lib/useSignalSim";
+import { LIVE_UNIFIED } from "@/lib/flags";
+import { apiUrl } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useTwinLive — física viva del Gemelo Digital para el overlay del mímico.
@@ -66,19 +68,34 @@ function sampleTwin(e: EquipmentDef): TwinLive {
  * /overview cuando el overlay del gemelo no está pedido).
  */
 export function useTwinLive(
-  equipment: EquipmentDef[] = PLANT.equipment,
+  equipment: EquipmentDef[],
   intervalMs = 2500,
   enabled = true,
 ): Record<string, TwinLive> {
   const racks = equipment.filter((e) => e.kind === "ro_rack");
   const build = () => Object.fromEntries(racks.map((e) => [e.code, sampleTwin(e)]));
-  const [live, setLive] = useState<Record<string, TwinLive>>(() => (enabled ? build() : {}));
+  const [live, setLive] = useState<Record<string, TwinLive>>(() =>
+    enabled && !LIVE_UNIFIED ? build() : {},
+  );
   const ref = useRef<number | null>(null);
 
   useEffect(() => {
     if (!enabled) {
       setLive({});
       return;
+    }
+    // Fuente única: pollear el resolver server-side (determinista). Mismo shape.
+    if (LIVE_UNIFIED) {
+      let alive = true;
+      const poll = async () => {
+        try {
+          const res = await fetch(apiUrl("/api/twin/live"));
+          if (res.ok && alive) setLive(await res.json());
+        } catch { /* red intermitente: mantener último */ }
+      };
+      poll();
+      ref.current = window.setInterval(poll, Math.max(intervalMs, 4000));
+      return () => { alive = false; if (ref.current) window.clearInterval(ref.current); };
     }
     setLive(build());
     ref.current = window.setInterval(() => setLive(build()), intervalMs);

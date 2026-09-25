@@ -11,7 +11,7 @@ export default async function ArPage({ params }: { params: Promise<{ code: strin
   const { code: raw } = await params;
   const code = decodeURIComponent(raw);
   const view = await getAssetArView(code);
-  const { app, branding } = await getPlantConfig();
+  const { app, branding, equipment } = await getPlantConfig();
 
   return (
     <div className="min-h-dvh bg-[var(--background)] text-[var(--foreground)]">
@@ -30,7 +30,7 @@ export default async function ArPage({ params }: { params: Promise<{ code: strin
       </header>
 
       {view ? (
-        <ArAssetView initial={view} code={code} />
+        <ArAssetView initial={view} code={code} equipment={equipment} />
       ) : (
         <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-6 py-20 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)]">

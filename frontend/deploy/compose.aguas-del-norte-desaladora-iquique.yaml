@@ -1,0 +1,39 @@
+# Generado por provision_app.py — no editar a mano.
+services:
+  aguas-del-norte-desaladora-iquique-ops:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        # El basePath de Next se congela en el build: una URL distinta exige
+        # recompilar. Por eso el Dockerfile lo toma como ARG (dos veces: los ARG
+        # no cruzan stages).
+        BASE_PATH: /aguas-del-norte-desaladora-iquique-ops
+        # Fuente única de valores de señal + snapshot de observación de terreno.
+        # Se prueba acá primero; "pasar a Coquimbo" = ponerlo en deploy/compose.yaml.
+        LIVE_SIGNALS_UNIFIED: "1"
+    image: aguas-del-norte-desaladora-iquique-ops:latest
+    container_name: aguas-del-norte-desaladora-iquique-ops
+    restart: unless-stopped
+    env_file: ../.env.aguas-del-norte-desaladora-iquique
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_BASE_PATH=/aguas-del-norte-desaladora-iquique-ops
+      - NEXT_PUBLIC_LIVE_SIGNALS_UNIFIED=1
+      - PUBLIC_ORIGIN=https://srv1617948.hstgr.cloud
+    ports:
+      - "127.0.0.1:18102:3000"
+    networks:
+      - tier0_edge_network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/aguas-del-norte-desaladora-iquique-ops/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+networks:
+  tier0_edge_network:
+    external: true

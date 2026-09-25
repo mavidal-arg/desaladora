@@ -4,11 +4,10 @@ import { useState } from "react";
 import { StatCard, Empty, fmtDate, fmtDateTime } from "@/components/uikit";
 import { StateBadge } from "@/components/mes";
 import { TabBar } from "@/components/TabBar";
-import { SortableTable } from "@/components/SortableTable";
-import type { Equipment, InspectionRoute, NonConformity } from "@/lib/adapters/types";
+import { cn } from "@/lib/utils";
+import type { Equipment, InspectionRoute, NonConformity, ObservationReading } from "@/lib/adapters/types";
 
 const TABS = ["Rondas", "Equipos especiales", "Instrumentos", "Observaciones de terreno"];
-const SEV_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 // El resto de la app está en castellano; el estado crudo de la NC no.
 const ESTADO_NC: Record<string, string> = { open: "Abierta", in_review: "En revisión", closed: "Cerrada" };
 const catOf: Record<string, InspectionRoute["category"]> = {
@@ -19,6 +18,7 @@ export function InspectionClient({ routes, ncs, equipment }: {
   routes: InspectionRoute[]; ncs: NonConformity[]; equipment: Equipment[];
 }) {
   const [tab, setTab] = useState(TABS[0]);
+  const [openNc, setOpenNc] = useState<string | null>(null);
   const now = Date.now();
   const allTasks = routes.flatMap((r) => r.tasks);
   const counts = {
@@ -46,28 +46,36 @@ export function InspectionClient({ routes, ncs, equipment }: {
       {tab === "Observaciones de terreno" ? (
         <>
           <p className="mb-3 text-[11px] text-[var(--muted-foreground)]">
-            Lo que se levanta escaneando el QR del equipo, con quién lo reportó y a qué hora.
+            Lo que se levanta escaneando el QR del equipo, con quién lo reportó y a qué hora. Tocá una fila para ver los datos que se veían en ese momento.
             {deTerreno.length > 0 && <> {deTerreno.length} de {observaciones.length} vienen de terreno; el resto las generó el sistema.</>}
           </p>
-          <SortableTable
-            rows={observaciones}
-            getRowKey={(n) => n.id}
-            emptyText="Sin observaciones registradas."
-            columns={[
-              { key: "code", header: "Código", sortAccessor: (n) => n.code, render: (n) => n.code },
-              { key: "activo", header: "Activo", sortAccessor: (n) => nombrePorId.get(n.assetId) ?? n.assetId, render: (n) => nombrePorId.get(n.assetId) ?? n.assetId },
-              { key: "sev", header: "Severidad", sortAccessor: (n) => SEV_RANK[n.severity] ?? 9, render: (n) => <StateBadge state={n.severity} size="sm" /> },
-              { key: "desc", header: "Observación", sortAccessor: (n) => n.description, render: (n) => n.description },
-              {
-                key: "autor", header: "Autor", sortAccessor: (n) => n.raisedBy ?? "",
-                render: (n) => n.raisedBy
-                  ? <span>{n.raisedBy}{n.raisedByRole ? <span className="text-[var(--muted-foreground)]"> · {n.raisedByRole}</span> : null}</span>
-                  : <span className="text-[var(--muted-foreground)]">sistema</span>,
-              },
-              { key: "raised", header: "Reportada", sortAccessor: (n) => new Date(n.raisedAt).getTime(), render: (n) => fmtDateTime(n.raisedAt) },
-              { key: "estado", header: "Estado", sortAccessor: (n) => n.status, render: (n) => <StateBadge state={n.status.replace("_", "")} label={ESTADO_NC[n.status] ?? n.status} size="sm" /> },
-            ]}
-          />
+          {observaciones.length === 0 ? <Empty text="Sin observaciones registradas." /> : (
+            <div className="space-y-2">
+              {observaciones.map((n) => {
+                const open = openNc === n.id;
+                const hasSnap = (n.readings?.length ?? 0) > 0;
+                return (
+                  <div key={n.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)]">
+                    <button
+                      onClick={() => hasSnap && setOpenNc(open ? null : n.id)}
+                      className={cn("flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-left text-xs", hasSnap && "hover:bg-[var(--muted)]/50")}
+                    >
+                      <span className="font-mono font-semibold">{n.code}</span>
+                      <StateBadge state={n.severity} size="sm" />
+                      <span className="text-[var(--muted-foreground)]">{nombrePorId.get(n.assetId) ?? n.assetId}</span>
+                      <span className="min-w-0 flex-1 truncate">{n.description}</span>
+                      <span className="text-[var(--muted-foreground)]">
+                        {n.raisedBy ?? "sistema"}{n.raisedByRole ? ` · ${n.raisedByRole}` : ""} · {fmtDateTime(n.raisedAt)}
+                      </span>
+                      <StateBadge state={n.status.replace("_", "")} label={ESTADO_NC[n.status] ?? n.status} size="sm" />
+                      {hasSnap && <span className="text-[10px] text-[var(--accent)]">{open ? "▲" : "▼"} datos</span>}
+                    </button>
+                    {open && hasSnap && <ObservationSnapshot readings={n.readings!} />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       ) : shown.length === 0 ? <Empty text="Sin rutas en esta categoría." /> : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -96,6 +104,50 @@ export function InspectionClient({ routes, ncs, equipment }: {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Tabla app-vs-terreno del snapshot de una observación. */
+function ObservationSnapshot({ readings }: { readings: ObservationReading[] }) {
+  const bySignal = new Map<string, { label: string; unit: string; app?: number; field?: number }>();
+  for (const r of readings) {
+    const e = bySignal.get(r.signal) ?? { label: r.label, unit: r.unit };
+    if (r.source === "app") e.app = r.value;
+    else e.field = r.value;
+    e.label = r.label; e.unit = r.unit || e.unit;
+    bySignal.set(r.signal, e);
+  }
+  const rows = [...bySignal.values()];
+  const nf = (n: number) => (Math.abs(n) >= 1000 ? n.toLocaleString("es-CL") : n);
+  return (
+    <div className="border-t border-[var(--border)] px-3 py-2">
+      <div className="mb-1 text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Datos al levantar la observación</div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-[10px] uppercase text-[var(--muted-foreground)]">
+            <th className="py-1 text-left font-medium">Señal</th>
+            <th className="py-1 text-right font-medium">App</th>
+            <th className="py-1 text-right font-medium">Terreno</th>
+            <th className="py-1 text-right font-medium">Δ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const delta = r.app != null && r.field != null ? r.field - r.app : null;
+            return (
+              <tr key={r.label} className="border-t border-[var(--border)]/50">
+                <td className="py-1 pr-2">{r.label}</td>
+                <td className="py-1 text-right font-mono tabular-nums">{r.app != null ? `${nf(Math.round(r.app * 100) / 100)} ${r.unit}` : "—"}</td>
+                <td className="py-1 text-right font-mono tabular-nums">{r.field != null ? `${nf(Math.round(r.field * 100) / 100)} ${r.unit}` : "—"}</td>
+                <td className={cn("py-1 text-right font-mono tabular-nums", delta != null && Math.abs(delta) > 0 ? "text-amber-500" : "text-[var(--muted-foreground)]")}>
+                  {delta != null ? `${delta > 0 ? "+" : ""}${Math.round(delta * 100) / 100}` : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -10,6 +10,7 @@
 
 import { useMemo } from "react";
 import { useTwinLive } from "@/lib/useTwinLive";
+import type { EquipmentDef } from "@/lib/plant-config";
 
 export type LiveValue = { value: number; unit?: string; ts?: number };
 
@@ -63,8 +64,8 @@ export const RO_SCENE_CONFIG: SceneConfig = {
 };
 
 /** SignalMap vivo (refresco ~2,5 s) derivado de useTwinLive para los racks RO + ERI. */
-export function useSceneSignals(): SignalMap {
-  const live = useTwinLive();
+export function useSceneSignals(equipment: EquipmentDef[]): SignalMap {
+  const live = useTwinLive(equipment);
   return useMemo(() => {
     const map: SignalMap = {};
     for (const [code, t] of Object.entries(live)) {

@@ -20,7 +20,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const session = JSON.stringify({ userId: user.id, role: user.role });
+    // `via: "password"` — la persona puso su clave. Es lo que habilita firmar
+    // una observación desde el QR de un activo (ver requirePassword en lib/auth).
+    const session = JSON.stringify({ userId: user.id, role: user.role, via: "password" });
     const res = NextResponse.json({
       ok: true,
       user: {

@@ -239,7 +239,7 @@ export const PLANT: PlantConfig = {
       specs: { presion: "6 bar", power: "400 kW" }, mimic: { x: 0, y: 1 }, primarySignal: "flow",
       signals: [sig("flow", "Caudal", "m³/h", 0, 5, 0, 1200), sig("pressure", "Presión", "bar", 0.1, 0.1, 0, 10), sig("motorCurrent", "Corriente", "A", 0, 2, 0, 150)],
       help: "Bomba de impulsión en reserva (standby); entra en servicio ante falla o mantenimiento de la principal." },
-    ...tk("A42", "Estanque Agua Potable Planta", "PROD", "running", 92, "8,5 m³"),
+    ...tk("TK-42", "Estanque Agua Potable Planta", "PROD", "running", 92, "8,5 m³"),  // era A42: colisionaba con la bomba A4-2
 
     // ── Salmuera / Descarga ──
     ...tk("A33", "Cámara de Rechazo", "BRINE", "running", 95, "—", [sig("flow", "Caudal salmuera", "m³/h", 1590, 80, 0, 1800), sig("tds", "SDT salmuera", "mg/l", 69793, 800, 60000, 75000)]),
@@ -312,7 +312,51 @@ function rorack(code: string, name: string, status: EquipmentDef["status"], heal
 }
 
 // ── Derivados ────────────────────────────────────────────────────────────────
-export const areaByCode = Object.fromEntries(PLANT.areas.map((a) => [a.code, a]));
-export const equipmentByArea = (code: string) => PLANT.equipment.filter((e) => e.areaCode === code);
+// `areaByCode` y `equipmentByArea` vivían acá, derivadas de la constante. Se
+// removieron al pasar la app a la config de la base: eran un atajo que devolvía
+// la planta del template aunque el cliente hubiera editado la suya. Quien
+// necesite ese índice lo arma con `getPlantConfig()` en el server component.
+/**
+ * Completa lo que una config guardada no tenga, mezclando los defaults del
+ * template bloque por bloque.
+ *
+ * Por qué existe: una fila escrita antes de que existiera el bloque `app` deja
+ * `cfg.app` en undefined y revienta a cualquier consumidor de la identidad. La
+ * alternativa —subir `version` para que el seed re-siembre— es justamente la que
+ * NO se puede usar: le pisaría al cliente su planta.
+ *
+ * Vive acá y no en `plant-config-store.ts` porque `prisma/seed.ts` la necesita y
+ * este módulo es puro: importarla desde el store arrastraría un segundo cliente
+ * Prisma al proceso de siembra.
+ */
+export function normalizar(raw: Partial<PlantConfig> | null | undefined): PlantConfig {
+  const c = (raw ?? {}) as Partial<PlantConfig>;
+  return {
+    ...PLANT,
+    ...c,
+    app: { ...PLANT.app, ...(c.app ?? {}) },
+    branding: { ...PLANT.branding, ...(c.branding ?? {}) },
+    flags: { ...PLANT.flags, ...(c.flags ?? {}) },
+    plant: { ...PLANT.plant, ...(c.plant ?? {}) },
+    bands: c.bands ?? PLANT.bands,
+    areas: c.areas ?? PLANT.areas,
+    equipment: c.equipment ?? PLANT.equipment,
+  };
+}
+
 export const flId = (areaCode: string) => `fl_${areaCode.toLowerCase()}`;
+/**
+ * Id de fila a partir del código físico del equipo.
+ *
+ * ⚠ Borra los separadores, así que NO es inyectiva: dos códigos que sólo se
+ * distingan por un guión caen en el mismo id. Pasó con `A4-2` (Bomba Agua de
+ * Mar 2) y `A42` (Estanque Agua Potable Planta): el segundo upsert pisaba al
+ * primero y quedaba una fila quimera —código de la bomba, nombre y categoría del
+ * estanque, señales de ambos— sin que nada fallara. Se resolvió renombrando el
+ * estanque a `TK-42` en vez de cambiar la función, porque cambiarla movía el id
+ * de los 28 equipos con guión y obligaba a regenerar las tablas.
+ *
+ * La red de contención es la guarda de `materializar()`: si dos códigos vuelven
+ * a colapsar, corta con los dos códigos en el mensaje en vez de corromper.
+ */
 export const eqId = (code: string) => `eq_${code.toLowerCase().replace(/[^a-z0-9]/g, "")}`;

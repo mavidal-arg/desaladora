@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { OeeDashboard, type ProductionTrendPoint } from "@/components/oee/OeeDashboard";
 import { apiUrl, cn } from "@/lib/utils";
 import { SortableTable } from "@/components/SortableTable";
+import { AlertLevelBadge } from "@/components/AlertLevelBadge";
 import { can } from "@/lib/permissions";
 import {
   RO_TRAINS, QUALITY_LIMITS, DOWNTIME_TYPE_LABELS, DOWNTIME_CAUSE_LABELS,
@@ -22,11 +23,6 @@ const dt = (iso: string) => new Date(iso).toLocaleString("es-CL", { day: "2-digi
 const nowLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
 
 // ── átomos ───────────────────────────────────────────────────────────────────
-function LevelBadge({ level }: { level: string }) {
-  const map: Record<string, string> = { critico: "bg-red-500/15 text-red-600", advertencia: "bg-amber-500/15 text-amber-600", info: "bg-sky-500/15 text-sky-600" };
-  const lbl: Record<string, string> = { critico: "Crítico", advertencia: "Advertencia", info: "Info" };
-  return <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", map[level] ?? "bg-muted")}>{lbl[level] ?? level}</span>;
-}
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">{label}{children}</label>;
 }
@@ -299,7 +295,7 @@ function AlertasTab({ role, alerts, rules, onAlerts, onRules, send }: {
           <div key={a.id} className="rounded-lg border border-border bg-card p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
-                <LevelBadge level={a.level} />
+                <AlertLevelBadge level={a.level} />
                 <span className="text-sm">{a.message}</span>
               </div>
               <span className={cn("shrink-0 text-[11px]", a.status === "activa" ? "text-red-600" : a.status === "reconocida" ? "text-amber-600" : "text-green-600")}>{statusLbl[a.status]}</span>
@@ -326,7 +322,7 @@ function AlertasTab({ role, alerts, rules, onAlerts, onRules, send }: {
           <div key={r.id} className="rounded-lg border border-border bg-card p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">{r.name}</span>
-              <LevelBadge level={r.level} />
+              <AlertLevelBadge level={r.level} />
             </div>
             <div className="mt-1 text-[11px] text-muted-foreground">
               {ALERT_METRIC_LABELS[r.metric] ?? r.metric} {r.op === "lt" ? "<" : ">"} {r.threshold}

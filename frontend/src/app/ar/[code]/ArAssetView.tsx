@@ -6,7 +6,8 @@ import { Radio, TriangleAlert, ClipboardPen, X, Gauge } from "lucide-react";
 import { StateBadge } from "@/components/mes";
 import { apiUrl, cn } from "@/lib/utils";
 import { can } from "@/lib/permissions";
-import { PLANT } from "@/lib/plant-config";
+import { LIVE_UNIFIED } from "@/lib/flags";
+import type { EquipmentDef } from "@/lib/plant-config";
 import { useSignalSim } from "@/lib/useSignalSim";
 import type { ArView, ArSignal, ArSeverity } from "@/lib/ar";
 
@@ -25,31 +26,48 @@ type Persona = {
   id: string; username: string; displayName: string; role: string; department: string;
 };
 
-export function ArAssetView({ initial, code }: { initial: ArView; code: string }) {
+export function ArAssetView({ initial, code, equipment }: { initial: ArView; code: string; equipment: EquipmentDef[] }) {
   const [view, setView] = useState<ArView>(initial);
   const [identity, setIdentity] = useState<Identity>(null);
   const [panel, setPanel] = useState(false);
 
-  // Poll "en vivo" cada 10 s (verdad del server).
+  // Poll "en vivo" (verdad del server). Con la fuente única el valor ya "respira"
+  // determinista server-side, así que se pollea más seguido (4 s) para verlo
+  // moverse; sin ella, 10 s (el server devuelve siempre lo mismo).
   useEffect(() => {
     const t = setInterval(async () => {
       try {
         const r = await fetch(apiUrl(`/api/ar/${encodeURIComponent(code)}`));
         if (r.ok) setView(await r.json());
       } catch { /* red intermitente en terreno: mantener último */ }
-    }, 10000);
+    }, LIVE_UNIFIED ? 4000 : 10000);
     return () => clearInterval(t);
   }, [code]);
 
   // Identidad actual (para habilitar acciones).
+  //
+  // SÓLO cuenta la acreditada con clave (`via === "password"`). La app abre sin
+  // login y deja tomar una identidad del plantel desde la barra izquierda, sin
+  // clave: si eso alcanzara acá, cualquiera podría firmar una observación de
+  // terreno con el nombre de un supervisor. Con una sesión de muestra el panel
+  // vuelve a pedir persona y clave, que es lo mismo que exige el servidor en
+  // `requirePassword` — esto sólo evita ofrecer un formulario que iba a fallar.
   useEffect(() => {
-    fetch(apiUrl("/api/auth/me")).then((r) => r.json()).then((d) => { if (d.user) setIdentity(d.user); }).catch(() => {});
+    fetch(apiUrl("/api/auth/me"))
+      .then((r) => r.json())
+      .then((d) => { if (d.user && d.via === "password") setIdentity(d.user); })
+      .catch(() => {});
   }, []);
 
   // Jitter de la señal primaria → sensación viva sobre la base del poll.
-  const eqDefs = useMemo(() => PLANT.equipment.filter((e) => e.code === code), [code]);
+  // Con la fuente única no hace falta: el valor del poll YA es el canónico y
+  // "respira" server-side, igual que en el gemelo y la ficha.
+  const eqDefs = useMemo(
+    () => (LIVE_UNIFIED ? [] : equipment.filter((e) => e.code === code)),
+    [equipment, code],
+  );
   const live = useSignalSim(eqDefs);
-  const primaryLive = live[code]?.value;
+  const primaryLive = LIVE_UNIFIED ? undefined : live[code]?.value;
 
   const eq = view.equipment;
   return (
@@ -104,7 +122,7 @@ export function ArAssetView({ initial, code }: { initial: ArView; code: string }
       </div>
 
       {panel && (
-        <ObservationPanel code={code} assetName={eq.name} identity={identity}
+        <ObservationPanel code={code} assetName={eq.name} identity={identity} signals={view.signals}
           onIdentify={setIdentity} onClose={() => setPanel(false)} />
       )}
     </div>
@@ -187,14 +205,17 @@ function RoContrast({ ro }: { ro: NonNullable<ArView["ro"]> }) {
  * que quisiera. Ahora las personas llegan de `/api/auth/directory`, que devuelve
  * nombre, usuario y rol y ninguna clave.
  */
-function ObservationPanel({ code, assetName, identity, onIdentify, onClose }: {
-  code: string; assetName: string; identity: Identity;
+function ObservationPanel({ code, assetName, identity, signals, onIdentify, onClose }: {
+  code: string; assetName: string; identity: Identity; signals: ArSignal[];
   onIdentify: (i: Identity) => void; onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState("medium");
   const [intervention, setIntervention] = useState(false);
+  // Lo que el operador lee en el instrumento (contraste con lo que muestra la app).
+  const [fieldVals, setFieldVals] = useState<Record<string, string>>({});
+  const [showReadings, setShowReadings] = useState(false);
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [elegida, setElegida] = useState<Persona | null>(null);
   const [clave, setClave] = useState("");
@@ -254,9 +275,12 @@ function ObservationPanel({ code, assetName, identity, onIdentify, onClose }: {
 
   const submit = async () => {
     if (!description.trim()) { toast.error("Escribí la observación"); taRef.current?.focus(); return; }
+    const readings = Object.entries(fieldVals)
+      .filter(([, v]) => v.trim() !== "" && Number.isFinite(Number(v)))
+      .map(([signal, v]) => ({ signal, value: Number(v) }));
     setBusy(true);
     try {
-      const res = await fetch(apiUrl("/api/ar/observation"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, description, severity, intervention }) });
+      const res = await fetch(apiUrl("/api/ar/observation"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, description, severity, intervention, readings }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(data.error ?? "No se pudo registrar"); return; }
       toast.success(`Observación ${data.code} registrada`);
@@ -346,6 +370,38 @@ function ObservationPanel({ code, assetName, identity, onIdentify, onClose }: {
               </label>
             </div>
             {intervention && <p className="text-[11px] text-amber-500">Se marcará severidad alta y quedará para que Planificación evalúe una OT.</p>}
+
+            {/* Lectura de campo: lo que marca el instrumento vs lo que muestra la
+                app. Se guarda junto con la observación como evidencia. */}
+            {LIVE_UNIFIED && signals.length > 0 && (
+              <div className="rounded-lg border border-[var(--border)]">
+                <button type="button" onClick={() => setShowReadings((v) => !v)}
+                  className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium">
+                  <span className="flex items-center gap-1.5"><Gauge className="h-3.5 w-3.5 text-[var(--accent)]" /> ¿Qué marca el instrumento?</span>
+                  <span className="text-[10px] text-[var(--muted-foreground)]">{showReadings ? "ocultar" : "opcional"}</span>
+                </button>
+                {showReadings && (
+                  <div className="space-y-1.5 border-t border-[var(--border)] p-3">
+                    <p className="text-[10px] text-[var(--muted-foreground)]">Anotá lo que ves en terreno; se guarda al lado del valor de la app.</p>
+                    {signals.map((s) => (
+                      <div key={s.signal} className="flex items-center gap-2 text-xs">
+                        <span className="min-w-0 flex-1 truncate">{s.label}</span>
+                        <span className="shrink-0 font-mono text-[10px] text-[var(--muted-foreground)]">app {fmt(Math.round(s.value * 100) / 100)}</span>
+                        <input
+                          type="number" inputMode="decimal" step="any"
+                          value={fieldVals[s.signal] ?? ""}
+                          onChange={(e) => setFieldVals((p) => ({ ...p, [s.signal]: e.target.value }))}
+                          placeholder="—"
+                          className="w-20 shrink-0 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-right font-mono text-sm"
+                        />
+                        <span className="w-10 shrink-0 text-[10px] text-[var(--muted-foreground)]">{s.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button onClick={submit} disabled={busy}
               className="w-full rounded-xl bg-[var(--accent)] py-2.5 text-sm font-semibold text-white active:opacity-90 disabled:opacity-50">
               {busy ? "Enviando…" : "Registrar observación"}

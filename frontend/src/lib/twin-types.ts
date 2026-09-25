@@ -79,6 +79,8 @@ export type TwinRackRow = {
   rfBase: number; // Rf de membrana limpia (base de calibración)
   cipDays: number | null; // días hasta CIP (RUL)
   trend: "stable" | "rising" | "critical"; // dRf/dt cualitativo
+  /** Ideal-vs-real de ESTE rack (no del líder). Poblado cuando la fuente única está activa. */
+  idealVsReal?: TwinIdealVsReal[];
 };
 
 /** Punto de la serie temporal para las tendencias de ensuciamiento. */

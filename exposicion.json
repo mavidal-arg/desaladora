@@ -27,7 +27,7 @@
     "revisado": "2026-09-03"
   },
   "medido": {
-    "fecha": "2026-09-03T11:26:57+00:00",
+    "fecha": "2026-09-11T00:36:32+00:00",
     "instancias": [
       {
         "slug": "aguas-del-norte-desaladora-iquique",
@@ -70,6 +70,8 @@
         "GET /api/auth/directory",
         "GET /api/auth/me",
         "GET /api/health",
+        "GET /api/live/[code]",
+        "GET /api/live",
         "GET /api/oee/alert-rules",
         "GET /api/oee/alerts",
         "GET /api/oee/downtime",
@@ -77,8 +79,11 @@
         "GET /api/oee/shifts",
         "GET /api/oee/summary",
         "GET /api/platform/me",
+        "GET /api/twin/alert-contact",
         "GET /api/twin/ceb-alert",
-        "GET /api/twin/cip-alert"
+        "GET /api/twin/cip-alert",
+        "GET /api/twin/live",
+        "GET /api/twin/notifications"
       ],
       "escritura": [
         "POST /api/ar/observation",
@@ -98,6 +103,8 @@
         "POST /api/oee/quality",
         "DELETE /api/oee/shifts",
         "POST /api/oee/shifts",
+        "PATCH /api/twin/alert-contact",
+        "POST /api/twin/evaluate-alerts",
         "POST /api/twin/ingest"
       ],
       "sin_guardia": [

@@ -25,7 +25,7 @@ Clon de trabajo de la V1 y molde de la fábrica de apps: de este repo salen todo
 - Que un clon nuevo herede la apertura sin que nadie decida abrirlo.
 - Que `TWIN_INGEST_TOKEN` siga sin setear mientras la app esté abierta.
 
-## Lo medido — 2026-09-03T11:26:57+00:00
+## Lo medido — 2026-09-11T00:36:32+00:00
 
 ### Instancias alcanzables
 
@@ -52,8 +52,8 @@ Salvedades por instancia:
 
 ### Endpoints servidos por Node-RED
 
-- Lectura: **16**
-- Escritura: **18**
+- Lectura: **21**
+- Escritura: **20**
 
   - `POST /api/ar/observation`
   - `POST /api/auth/assume`
@@ -72,6 +72,8 @@ Salvedades por instancia:
   - `POST /api/oee/quality`
   - `DELETE /api/oee/shifts`
   - `POST /api/oee/shifts`
+  - `PATCH /api/twin/alert-contact`
+  - `POST /api/twin/evaluate-alerts`
   - `POST /api/twin/ingest`
 
 ## Hallazgos

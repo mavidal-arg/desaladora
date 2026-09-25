@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getPlantConfig } from "@/lib/plant-config-store";
 import { eqId } from "@/lib/plant-config";
+import { simValueAt } from "@/lib/sim";
+import { LIVE_UNIFIED } from "@/lib/flags";
 import {
   TWIN_THRESHOLDS,
   type TwinSummary,
@@ -92,6 +94,46 @@ export async function loadRackReadings(): Promise<Map<string, RackReadings>> {
 export const latestOf = (rr: RackReadings, name: string): number | undefined =>
   rr.get(name)?.at(-1)?.value;
 
+// ── Física viva del gemelo — FUENTE ÚNICA (ver lib/live-signals.ts) ──────────
+// Reemplaza al `useTwinLive` que simulaba en el browser con Math.random. Cada
+// métrica "respira" deterministamente alrededor del último valor sembrado, así
+// que /twin, /ar y la ficha del activo muestran el MISMO número por rack.
+
+/** Amplitud de respiración por señal virtual, fracción del centro. */
+const TWIN_LIVE_AMP: Record<string, number> = {
+  rf: 0.015, rfNorm: 0.012, sec: 0.02, tmp: 0.015, ndp: 0.02, piOsmotic: 0.008, beta: 0.01,
+};
+
+export type RackLive = {
+  rf: number; rfNorm: number; sec: number; tmp: number;
+  ndp: number; piOsmotic: number; beta: number; foulFrac: number;
+};
+
+/** Métricas físicas vivas por rack RO en el instante `at`. */
+export async function getTwinLive(at: number = Date.now()): Promise<Record<string, RackLive>> {
+  const byRack = await loadRackReadings();
+  const out: Record<string, RackLive> = {};
+  for (const code of RO_CODES) {
+    const rr = byRack.get(code);
+    if (!rr) continue;
+    const base = eqId(code);
+    const live = (name: string): number => {
+      const center = rr.get(name)?.at(-1)?.value ?? 0;
+      if (!center) return 0;
+      return simValueAt(`${base}_${name}`, at, center, Math.abs(center) * (TWIN_LIVE_AMP[name] ?? 0.02));
+    };
+    const rfNormSeries = rr.get("rfNorm") ?? [];
+    const rfBase = rfNormSeries.length ? Math.min(...rfNormSeries.map((x) => x.value)) : 0;
+    const rfNorm = live("rfNorm");
+    out[code] = {
+      rf: live("rf"), rfNorm, sec: live("sec"), tmp: live("tmp"),
+      ndp: live("ndp"), piOsmotic: live("piOsmotic"), beta: live("beta"),
+      foulFrac: rfBase ? Math.max(0, rfNorm / rfBase - 1) : 0,
+    };
+  }
+  return out;
+}
+
 /** Estima días al próximo CIP: regresión de dRf/dt (post-último-lavado) vs umbral. */
 function estimateCipDays(rfNormSeries: { value: number }[], rfBase: number): number | null {
   if (rfNormSeries.length < 2) return null;
@@ -129,25 +171,49 @@ export async function getTwinSummary(): Promise<TwinSummary> {
 
   const racks: TwinRackRow[] = [];
   const cfgByCode = new Map(cfg.equipment.map((e) => [e.code, e]));
+  const now = Date.now();
 
   for (const code of RO_CODES) {
     const rr = byRack.get(code)!;
     const rfNormSeries = rr.get("rfNorm") ?? [];
     const rfBase = rfNormSeries.length ? Math.min(...rfNormSeries.map((r) => r.value)) : 0;
+    // El "ahora" escalar respira deterministamente sobre el último sembrado
+    // cuando la fuente única está activa; la trayectoria de ensuciamiento
+    // (health, cipDays, trend) sigue leyendo la serie sembrada.
+    const nowVal = (name: string, ampFrac: number): number => {
+      const center = latestOf(rr, name) ?? 0;
+      if (!LIVE_UNIFIED || !center) return center;
+      return simValueAt(`${eqId(code)}_${name}`, now, center, Math.abs(center) * ampFrac);
+    };
     const metrics: TwinMetrics = {
-      rf: latestOf(rr, "rf") ?? 0,
+      rf: nowVal("rf", 0.015),
       rfNorm: latestOf(rr, "rfNorm") ?? 0,
-      sec: latestOf(rr, "sec") ?? 0,
-      tmp: latestOf(rr, "tmp") ?? 0,
-      ndp: latestOf(rr, "ndp") ?? 0,
+      sec: nowVal("sec", 0.02),
+      tmp: nowVal("tmp", 0.015),
+      ndp: nowVal("ndp", 0.02),
       piOsmotic: latestOf(rr, "piOsmotic") ?? 0,
       beta: latestOf(rr, "beta") ?? 0,
     };
-    const foul = rfBase ? metrics.rfNorm / rfBase : 1;
+    const foulSeed = rfBase ? (latestOf(rr, "rfNorm") ?? 0) / rfBase : 1;
     const cipDays = estimateCipDays(rfNormSeries, rfBase);
-    const health = foulHealthOf(foul, latestOf(rr, "saltRejection"), latestOf(rr, "dpTmp"));
+    const health = foulHealthOf(foulSeed, latestOf(rr, "saltRejection"), latestOf(rr, "dpTmp"));
     const trend: TwinRackRow["trend"] =
-      cipDays !== null && cipDays <= 7 ? "critical" : foul > 1.02 ? "rising" : "stable";
+      cipDays !== null && cipDays <= 7 ? "critical" : foulSeed > 1.02 ? "rising" : "stable";
+
+    // Ideal (membrana limpia = base de la serie) vs real medido, de ESTE rack.
+    const secS = (rr.get("sec") ?? []).map((x) => x.value);
+    const tmpS = (rr.get("tmp") ?? []).map((x) => x.value);
+    const recIdeal = (cfg.flags?.recoveryPct as number) ?? 45;
+    const recReal = lastLog?.recoveryPct ?? recIdeal;
+    const devPct = (real: number, ideal: number) => (ideal ? Math.round(((real - ideal) / ideal) * 1000) / 10 : 0);
+    const idealVsReal: TwinIdealVsReal[] = secS.length
+      ? [
+          { label: "SEC", unit: "kWh/m³", ideal: r(Math.min(...secS), 2), real: r(metrics.sec, 2), deviationPct: devPct(metrics.sec, Math.min(...secS)) },
+          { label: "TMP", unit: "bar", ideal: r(Math.min(...tmpS), 1), real: r(metrics.tmp, 1), deviationPct: devPct(metrics.tmp, Math.min(...tmpS)) },
+          { label: "Recovery", unit: "%", ideal: r(recIdeal, 1), real: r(recReal, 1), deviationPct: devPct(recReal, recIdeal) },
+        ]
+      : [];
+
     racks.push({
       code,
       name: cfgByCode.get(code)?.name ?? code,
@@ -157,6 +223,7 @@ export async function getTwinSummary(): Promise<TwinSummary> {
       rfBase,
       cipDays,
       trend,
+      idealVsReal,
     });
   }
 

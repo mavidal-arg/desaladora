@@ -14,8 +14,8 @@ export type SignalLabel = { label: string; desc: string };
 export const SIGNAL_LABELS: Record<string, SignalLabel> = {
   // ── Membranas RO ──
   dpTmp: {
-    label: "ΔP transmembrana (ensuciamiento)",
-    desc: "Caída de presión a través del tren de membranas; su aumento indica ensuciamiento/fouling y anticipa la necesidad de CIP.",
+    label: "ΔP del tren (ensuciamiento)",
+    desc: "Caída de presión entre la entrada y la salida del tren de membranas; su aumento indica ensuciamiento/fouling y anticipa la necesidad de CIP. No confundir con la TMP transmembrana (tmp) del gemelo.",
   },
   recovery: {
     label: "Recovery",
@@ -34,8 +34,8 @@ export const SIGNAL_LABELS: Record<string, SignalLabel> = {
   // los trenes RO (~54 bar). La descripción vale para ambos, pero el régimen de
   // limpieza que anticipa NO es el mismo: en UF dispara un CEB, en RO un CIP.
   tmp: {
-    label: "Presión transmembrana (TMP)",
-    desc: "Presión neta a través de la membrana; su aumento refleja ensuciamiento. En ultrafiltración anticipa el próximo CEB (retrolavado químico, ciclo de horas); en ósmosis inversa, el próximo CIP (ciclo de semanas).",
+    label: "TMP transmembrana",
+    desc: "Presión neta a través de la membrana; su aumento refleja ensuciamiento. En ultrafiltración anticipa el próximo CEB (retrolavado químico, ciclo de horas); en ósmosis inversa, el próximo CIP (ciclo de semanas). Distinta de la ΔP del tren (dpTmp), que es la caída de presión entre entrada y salida del rack.",
   },
   flux: {
     label: "Flux",

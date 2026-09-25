@@ -27,6 +27,7 @@ import { statusColor } from "@/lib/status-colors";
 import { useTwinLive } from "@/lib/useTwinLive";
 import type { TwinRackRow } from "@/lib/twin-types";
 import { apiUrl, cn } from "@/lib/utils";
+import type { EquipmentDef } from "@/lib/plant-config";
 
 // Relación de aspecto nativa del asset (1200 × 578 px).
 const IMG = { src: "/twin/ro-area-3d.png", w: 1200, h: 578 };
@@ -53,9 +54,21 @@ function foulFractionOf(health: number) {
   return clamp((90 - health) * 0.011, 0, 0.25);
 }
 
-// Clave semántica de severidad por fouling, consistente con PlantSynoptic.
+// Umbrales de ensuciamiento, sobre la subida de Rf respecto de la membrana limpia.
+export const FOUL_CIP = 0.15;    // ≥ 15 % ⇒ el CIP ya está vencido
+export const FOUL_AVISO = 0.10;  // ≥ 10 % ⇒ hay que programarlo
+
+/**
+ * Clave de severidad por ENSUCIAMIENTO, no por estado del equipo.
+ *
+ * Devolvía `falla`/`fuera_rango`/`en_rango`, que son las claves de estado
+ * operativo, y el resultado era que un tren produciendo con las membranas sucias
+ * se leía como un tren roto: el clon de Redabast abría el Modelo 3D con tres de
+ * cuatro trenes en «FALLA» heredando la salud del template. Un CIP vencido es
+ * mantenimiento programable, no una falla.
+ */
 function severityKey(foulFrac: number) {
-  return foulFrac >= 0.15 ? "falla" : foulFrac >= 0.1 ? "fuera_rango" : "en_rango";
+  return foulFrac >= FOUL_CIP ? "cip_vencido" : foulFrac >= FOUL_AVISO ? "proximo_cip" : "limpio";
 }
 
 function fmt(v: number, dp = 1) {
@@ -145,9 +158,9 @@ function Hotspot({ r, x, y, align }: { r: RackReadout; x: number; y: number; ali
   );
 }
 
-export function Model3DView({ racks }: { racks: TwinRackRow[] }): JSX.Element {
+export function Model3DView({ racks, equipment }: { racks: TwinRackRow[]; equipment: EquipmentDef[] }): JSX.Element {
   // Señales vivas por tren RO (mismo hook e intervalo que el overlay del mímico).
-  const live = useTwinLive();
+  const live = useTwinLive(equipment);
 
   const byCode = new Map(racks.map((r) => [r.code, r]));
   const readouts: RackReadout[] = HOTSPOTS.map(({ code }) => {
@@ -186,8 +199,11 @@ export function Model3DView({ racks }: { racks: TwinRackRow[] }): JSX.Element {
                 <TooltipContent side="top" className="max-w-xs">
                   <p className="text-[11px] leading-snug">
                     Render isométrico del contenedor de trenes RO (IOM del proveedor) anotado con las
-                    señales físicas vivas de cada tren. El color del pin sigue el ensuciamiento (fouling):
-                    verde en rango, ámbar en advertencia, rojo cerca del umbral de CIP.
+                    señales físicas vivas de cada tren. El color del pin sigue el ENSUCIAMIENTO de las
+                    membranas —cuánto subió la resistencia Rf sobre la de la membrana limpia—, no el
+                    estado del equipo: un tren en rojo sigue produciendo, lo que pide es un CIP.
+                    {" "}Limpio por debajo del {Math.round(FOUL_AVISO * 100)} % · próximo a CIP desde el{" "}
+                    {Math.round(FOUL_AVISO * 100)} % · CIP vencido desde el {Math.round(FOUL_CIP * 100)} %.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -197,7 +213,7 @@ export function Model3DView({ racks }: { racks: TwinRackRow[] }): JSX.Element {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            {(["en_rango", "fuera_rango", "falla"] as const).map((k) => {
+            {(["limpio", "proximo_cip", "cip_vencido"] as const).map((k) => {
               const v = statusColor(k);
               return (
                 <span key={k} className="flex items-center gap-1.5 text-xs text-muted-foreground">

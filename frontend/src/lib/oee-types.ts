@@ -286,6 +286,9 @@ export const ALERT_METRIC_LABELS: Record<string, string> = {
   tds: "SDT permeado",
   ph: "pH permeado",
   downtime: "Duración de parada",
+  // Gemelo Digital — RUL hasta el próximo lavado (desal.ts / uf.ts).
+  cip_days: "RUL CIP (días)",
+  ceb_hours: "RUL CEB (horas)",
 };
 
 // ── Estructuras del resumen computado ────────────────────────────────────────

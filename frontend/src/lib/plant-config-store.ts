@@ -1,36 +1,22 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { PLANT, type PlantConfig } from "@/lib/plant-config";
+import { PLANT, normalizar, type PlantConfig } from "@/lib/plant-config";
+
+// Se re-exporta para no romper a quien ya la importaba desde acá.
+export { normalizar };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Store server-side de la config de planta (singleton en DB).
-// El mímico/áreas leen de acá; si no hay fila, cae al PLANT estático (default).
-// Editar vía Admin CRUD persiste acá y se refleja en toda la app.
+// Store server-side de la config de planta (singleton en DB). Sólo LECTURA.
+//
+// Todo lo que la app muestra de la planta —mímico, áreas, gemelo, vistas AR,
+// hoja de QR— sale de acá; si no hay fila, cae al `PLANT` estático.
+//
+// El `savePlantConfig()` que vivía en este archivo se fue con Administración: la
+// planta ya no se edita desde adentro de la app sino desde la fábrica
+// (`tier0-appfactory-ops` → Editar), que escribe la fila y corre el seed. Quien
+// proyecta la config sobre las tablas es `materializar()`, y su único llamador
+// pasa a ser `prisma/seed.ts`, en cada arranque del contenedor.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Completa lo que la fila guardada no tenga.
- *
- * Por qué existe: la fila que ya está en producción se guardó ANTES de que
- * existiera el bloque `app`, así que leerla cruda deja `cfg.app` en undefined y
- * revienta cualquier consumidor de la identidad. La alternativa —subir
- * `PLANT.version` para que el seed re-siembre— es justamente la que NO se puede
- * usar: el seed corre en cada arranque y le pisaría al cliente su identidad.
- */
-export function normalizar(raw: Partial<PlantConfig> | null | undefined): PlantConfig {
-  const c = (raw ?? {}) as Partial<PlantConfig>;
-  return {
-    ...PLANT,
-    ...c,
-    app: { ...PLANT.app, ...(c.app ?? {}) },
-    branding: { ...PLANT.branding, ...(c.branding ?? {}) },
-    flags: { ...PLANT.flags, ...(c.flags ?? {}) },
-    plant: { ...PLANT.plant, ...(c.plant ?? {}) },
-    bands: c.bands ?? PLANT.bands,
-    areas: c.areas ?? PLANT.areas,
-    equipment: c.equipment ?? PLANT.equipment,
-  };
-}
 
 // `cache` deduplica la lectura dentro de un mismo request: el layout raíz y
 // `generateMetadata` la piden por separado y no hace falta ir dos veces a la DB.
@@ -43,14 +29,3 @@ export const getPlantConfig = cache(async (): Promise<PlantConfig> => {
   }
   return PLANT;
 });
-
-export async function savePlantConfig(data: PlantConfig): Promise<void> {
-  // Se normaliza también al guardar: un PUT viejo (sin `app`) no debe borrar la
-  // identidad que ya tenía el cliente.
-  const completa = normalizar(data);
-  await prisma.plantConfig.upsert({
-    where: { id: "singleton" },
-    update: { data: completa as unknown as object },
-    create: { id: "singleton", data: completa as unknown as object },
-  });
-}

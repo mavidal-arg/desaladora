@@ -140,6 +140,16 @@ export interface Procedure {
   safetyNotes: string[];
 }
 
+export interface ObservationReading {
+  signal: string;
+  label: string;
+  value: number;
+  unit: string;
+  /** "app" = lo que mostraba la app · "field" = lo que leyó el operador. */
+  source: "app" | "field";
+  capturedAt: string;
+}
+
 export interface NonConformity {
   id: string;
   code: string;
@@ -147,10 +157,17 @@ export interface NonConformity {
   severity: Criticality;
   description: string;
   status: "open" | "in_review" | "closed";
+  /** Categoría corta para agrupar recurrencia por equipo (ver finding-treatment.ts). */
+  findingType: string;
+  /** Sólo se fija al cerrar: distingue un hallazgo resuelto de uno mal levantado. */
+  treatmentOutcome?: "resolved" | "false_positive" | null;
+  treatmentNote?: string | null;
   raisedAt: string;
   /** Quién la levantó. Vacío en las no-conformidades del sistema (sin autor). */
   raisedBy?: string | null;
   raisedByRole?: string | null;
+  /** Snapshot de datos del momento en que se levantó (sólo observaciones de terreno). */
+  readings?: ObservationReading[];
 }
 
 export interface InspectionRoute {

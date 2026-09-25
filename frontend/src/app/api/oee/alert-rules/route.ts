@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { listAlertRules } from "@/lib/oee";
 import { ALERT_METRIC_LABELS, RO_TRAINS } from "@/lib/oee-types";
+import { UF_CODES } from "@/lib/uf";
 
 const LEVELS = ["critico", "advertencia", "info"];
 const OPS = ["lt", "gt"];
@@ -22,7 +23,10 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => null);
   if (!b?.name || !ALERT_METRIC_LABELS[b.metric] || !OPS.includes(b.op) || !LEVELS.includes(b.level) || typeof b.threshold !== "number")
     return NextResponse.json({ error: "Datos inválidos: name, metric, op(lt|gt), threshold, level" }, { status: 400 });
-  if (b.trainCode && !RO_TRAINS.includes(b.trainCode))
+  // UF (skids A12-x) tiene su propio namespace de código, distinto de los
+  // trenes RO (A25-x) — cip_days es RO, ceb_hours es UF.
+  const validTrains: readonly string[] = b.metric === "ceb_hours" ? UF_CODES : RO_TRAINS;
+  if (b.trainCode && !validTrains.includes(b.trainCode))
     return NextResponse.json({ error: "trainCode inválido" }, { status: 400 });
 
   const id: string = b.id || `rule_${Date.now()}`;

@@ -10,7 +10,7 @@ import { SceneCanvas } from "@/components/twin/SceneCanvas";
 import { useSceneSignals, RO_SCENE_CONFIG } from "@/lib/useSceneSignals";
 import { useTwinLive, type TwinLive } from "@/lib/useTwinLive";
 import { LIVE_UNIFIED } from "@/lib/flags";
-import { PLANT } from "@/lib/plant-config";
+import type { EquipmentDef } from "@/lib/plant-config";
 import { InfoTip } from "@/components/ui/info-tip";
 import { statusColor, CHART, CATEGORY_PALETTE } from "@/lib/status-colors";
 import { cn, apiUrl } from "@/lib/utils";
@@ -106,9 +106,9 @@ function IdealVsRealCard({ label, unit, ideal, real, deviationPct }: {
 }
 
 /** Tab "Modelo 3D": 3D navegable (react-three-fiber) con toggle a la imagen anotada. */
-function Model3DTab({ racks }: { racks: TwinRackRow[] }) {
+function Model3DTab({ racks, equipment }: { racks: TwinRackRow[]; equipment: EquipmentDef[] }) {
   const [view, setView] = useState<"3D" | "img">("3D");
-  const signals = useSceneSignals(); // física viva (useTwinLive) → anchors del GLB
+  const signals = useSceneSignals(equipment); // física viva (useTwinLive) → anchors del GLB
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -141,7 +141,7 @@ function Model3DTab({ racks }: { racks: TwinRackRow[] }) {
           height={560}
         />
       ) : (
-        <Model3DView racks={racks} />
+        <Model3DView racks={racks} equipment={equipment} />
       )}
       <p className="text-[11px] text-muted-foreground">
         Versión preliminar — geometría procedural del skid RO (modelo esquemático); en real cargaría el
@@ -160,7 +160,7 @@ function Model3DTab({ racks }: { racks: TwinRackRow[] }) {
 const TWIN_TABS = ["Ósmosis Inversa — CIP", "Ultrafiltración — CEB", "Modelo 3D"] as const;
 type TwinTab = (typeof TWIN_TABS)[number];
 
-export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
+export function TwinClient({ data, uf, equipment }: { data: TwinSummary; uf: UfSummary; equipment: EquipmentDef[] }) {
   const { racks, idealVsReal, cip, thresholds } = data;
   const [spcMetric, setSpcMetric] = useState<"rf" | "tmp">("rf");
   const [secMode, setSecMode] = useState<"agg" | "trains">("agg");
@@ -175,7 +175,7 @@ export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
   // ── Física viva (useTwinLive, ~2,5 s) + buffer rodante para animar SEC/SPC ──
   // Sólo corre el intervalo en la pestaña de ósmosis inversa: es la única que
   // consume la física viva de los racks.
-  const liveMap = useTwinLive(PLANT.equipment, 2500, tab === "Ósmosis Inversa — CIP");
+  const liveMap = useTwinLive(equipment, 2500, tab === "Ósmosis Inversa — CIP");
   const [buf, setBuf] = useState<{ t: string; live: Record<string, TwinLive> }[]>([]);
   useEffect(() => {
     if (Object.keys(liveMap).length === 0) return;
@@ -277,7 +277,7 @@ export function TwinClient({ data, uf }: { data: TwinSummary; uf: UfSummary }) {
       <TabBar tabs={[...TWIN_TABS]} active={tab} onChange={(t) => setTab(t as TwinTab)} />
 
       {tab === "Modelo 3D" ? (
-        <Model3DTab racks={racks} />
+        <Model3DTab racks={racks} equipment={equipment} />
       ) : tab === "Ultrafiltración — CEB" ? (
         <UfCebPanel data={uf} />
       ) : (

@@ -41,11 +41,18 @@ export async function listNonConformities(assetId?: string): Promise<NonConformi
   const rows = await prisma.nonConformity.findMany({
     where: assetId ? { equipmentId: assetId } : undefined,
     orderBy: { raisedAt: "desc" },
+    include: { readings: { orderBy: [{ source: "asc" }, { signal: "asc" }] } },
   });
   return rows.map((n) => ({
     id: n.id, code: n.code, assetId: n.equipmentId, severity: n.severity as Criticality,
     description: n.description, status: n.status as NonConformity["status"], raisedAt: n.raisedAt.toISOString(),
+    findingType: n.findingType, treatmentOutcome: n.treatmentOutcome as NonConformity["treatmentOutcome"],
+    treatmentNote: n.treatmentNote,
     raisedBy: n.raisedBy, raisedByRole: n.raisedByRole,
+    readings: n.readings.map((r) => ({
+      signal: r.signal, label: r.label, value: r.value, unit: r.unit,
+      source: r.source as "app" | "field", capturedAt: r.capturedAt.toISOString(),
+    })),
   }));
 }
 

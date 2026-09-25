@@ -1,0 +1,250 @@
+{
+  "name": "wf-desal-alert-fanout",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "desal-alert-fanout",
+        "responseMode": "onReceived",
+        "options": {
+          "responseData": "noData",
+          "responseCode": 200
+        }
+      },
+      "id": "d1111111-a1a1-4a1a-a1a1-d11111111111",
+      "name": "Webhook (desal-alert)",
+      "webhookId": "d2222222-b2b2-4b2b-b2b2-d22222222222",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        320
+      ],
+      "notes": "desaladora-coquimbo-v2/frontend/src/lib/alert-notify.ts POSTea acá cuando se crea un AlertEvent de nivel critico/advertencia. Sin auth en el nodo (mismo criterio que wf-case-fanout: la ruta larga hace de secreto)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma el texto por canal desde un solo payload — un nodo, no tres, para que\n// la lógica de formato no diverja entre Email/WhatsApp/Llamada.\n//\n// El body llega envuelto por el Webhook node de n8n ($json.body es el JSON\n// que mandó alert-notify.ts), mismo criterio que \"Compose Telegram body\" en\n// wf-case-fanout.json.\nconst body = $input.first().json.body ?? $input.first().json;\n\nconst levelLabel = { critico: \"CRÍTICO\", advertencia: \"ADVERTENCIA\", info: \"INFO\" }[body.level] ?? body.level;\nconst trainTxt = body.train_code ? ` · ${body.train_code}` : \"\";\n\n/** Escapa los 5 caracteres que TwiML (XML) interpreta, para <Say>. */\nconst escXml = (v) => String(v ?? \"\")\n  .replace(/&/g, \"&amp;\")\n  .replace(/</g, \"&lt;\")\n  .replace(/>/g, \"&gt;\")\n  .replace(/\"/g, \"&quot;\")\n  .replace(/'/g, \"&apos;\");\n\nconst emailSubject = `[Tier0 · ${levelLabel}] ${body.rule_name}${trainTxt}`;\nconst emailText = `${body.message}\\n\\nActivo: ${body.train_code ?? \"planta\"}\\nMétrica: ${body.metric} ${body.op === \"lt\" ? \"<\" : \">\"} ${body.threshold}\\nHora: ${body.ts}\\n\\n— Tier0, alerta automática (demo).`;\n\nconst whatsappText = `⚠️ *${levelLabel}* — ${body.rule_name}${trainTxt}\\n${body.message}`;\n\n// <Say> en español; una llamada corta y clara — el objetivo es que suene el\n// teléfono y se entienda en 10 segundos, no dar el detalle completo.\nconst callTwiml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Say language=\"es-MX\">`\n  + `Alerta ${levelLabel === \"CRÍTICO\" ? \"crítica\" : \"de planta\"} de Tier0. `\n  + `${escXml(body.rule_name)}. ${escXml(body.message)}`\n  + `</Say></Response>`;\n\nreturn [{\n  json: {\n    alert_id: body.alert_id,\n    level: body.level,\n    train_code: body.train_code,\n    to_email: body.contact?.email || \"\",\n    to_whatsapp: body.contact?.phone_whatsapp || \"\",\n    to_voice: body.contact?.phone_voice || \"\",\n    email_subject: emailSubject,\n    email_text: emailText,\n    whatsapp_text: whatsappText,\n    call_twiml: callTwiml,\n  },\n}];\n"
+      },
+      "id": "d3333333-c3c3-4c3c-c3c3-d33333333333",
+      "name": "Compose alert body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "critico",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "lvl-critico",
+                    "leftValue": "={{ $json.level }}",
+                    "rightValue": "critico",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "advertencia",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "lvl-advertencia",
+                    "leftValue": "={{ $json.level }}",
+                    "rightValue": "advertencia",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d4444444-d4d4-4d4d-d4d4-d44444444444",
+      "name": "Switch by level",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        680,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SMTP_FROM_EMAIL }}",
+        "toEmail": "={{ $json.to_email }}",
+        "subject": "={{ $json.email_subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.email_text }}",
+        "options": {}
+      },
+      "id": "d5555555-e5e5-4e5e-e5e5-d55555555555",
+      "name": "Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        940,
+        200
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_CON_ID_DEL_CREDENTIAL_SMTP",
+          "name": "SMTP · Tier0 alertas"
+        }
+      },
+      "notes": "Credencial SMTP: N8N UI → Credentials → New → 'Email Send (SMTP)'. SMTP_FROM_EMAIL es una env var del propio n8n (no de este proyecto)."
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
+        "to": "={{ $json.to_whatsapp }}",
+        "toWhatsapp": true,
+        "message": "={{ $json.whatsapp_text }}"
+      },
+      "id": "d6666666-f6f6-4f6f-f6f6-d66666666666",
+      "name": "WhatsApp (Twilio)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        940,
+        340
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "REPLACE_CON_ID_DEL_CREDENTIAL_TWILIO",
+          "name": "Twilio · Tier0 alertas"
+        }
+      },
+      "notes": "Sandbox de WhatsApp: el celular destino tiene que mandar el código de join al número de sandbox de Twilio ANTES de la demo, no durante. TWILIO_WHATSAPP_FROM = 'whatsapp:+1415XXXXXXX' (número de sandbox)."
+    },
+    {
+      "parameters": {
+        "resource": "call",
+        "operation": "make",
+        "from": "={{ $env.TWILIO_FROM_NUMBER }}",
+        "to": "={{ $json.to_voice }}",
+        "twiml": true,
+        "message": "={{ $json.call_twiml }}"
+      },
+      "id": "d7777777-a7a7-4a7a-a7a7-d77777777777",
+      "name": "Llamada (Twilio)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        940,
+        480
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "REPLACE_CON_ID_DEL_CREDENTIAL_TWILIO",
+          "name": "Twilio · Tier0 alertas"
+        }
+      },
+      "notes": "Sólo rama 'critico' — la llamada es el canal más intrusivo, reservado a lo que de verdad amerita interrumpir a alguien."
+    }
+  ],
+  "connections": {
+    "Webhook (desal-alert)": {
+      "main": [
+        [
+          {
+            "node": "Compose alert body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose alert body": {
+      "main": [
+        [
+          {
+            "node": "Switch by level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch by level": {
+      "main": [
+        [
+          {
+            "node": "Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "WhatsApp (Twilio)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Llamada (Twilio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "WhatsApp (Twilio)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Santiago"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "wf-desal-alert-fanout",
+    "description": "Recibe AlertEvent de desaladora-coquimbo-v2/frontend/src/lib/alert-notify.ts y los reparte por Email/WhatsApp/Llamada según nivel (critico = los 3 canales, advertencia = Email+WhatsApp, info = no se despacha). v1.0.0 — demo de venta, mismo patrón de fan-out por severidad que wf-case-fanout.json de icsh-assistant."
+  },
+  "tags": [
+    "desaladora",
+    "alertas",
+    "fanout",
+    "demo"
+  ],
+  "active": false,
+  "pinData": {},
+  "versionId": "1.0.0"
+}

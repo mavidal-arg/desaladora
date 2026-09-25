@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { X } from "lucide-react";
 import { apiUrl } from "@/lib/utils";
+import { LIVE_UNIFIED } from "@/lib/flags";
 import { StateBadge, SPCChart } from "@/components/mes";
+import { FindingTreatDialog } from "@/components/FindingTreatDialog";
+import { can } from "@/lib/permissions";
 import { esWoType, esEquipCategory, esEquipStatus, esPartCategory, esStrategy, esTrend } from "@/lib/labels";
 import type {
   Equipment, SignalValue, WorkOrder, MaintenancePlan, SparePart,
   SeDocument, NonConformity, CostBreakdown, PredictiveProfile, TrendPoint,
 } from "@/lib/adapters/types";
+import type { EquipmentFindingRecurrence } from "@/lib/finding-treatment";
 
 interface Asset360 {
   equipment: Equipment;
@@ -20,6 +24,7 @@ interface Asset360 {
   nonConformities: NonConformity[];
   costs: CostBreakdown;
   predictive: PredictiveProfile | null;
+  findingHistory: EquipmentFindingRecurrence[];
 }
 
 const TABS = ["Resumen", "Maintenance", "Planes", "Monitoreo", "Tiempo real", "Repuestos", "SOP"] as const;
@@ -33,11 +38,22 @@ const fmtDateTime = (s: string) =>
     hour: "2-digit", minute: "2-digit", hour12: false,
   });
 
-export function Asset360Modal({ assetId, onClose }: { assetId: string; onClose: () => void }) {
+export function Asset360Modal({ assetId, onClose, role = "Lector", initialTab = "Resumen" }: {
+  assetId: string; onClose: () => void; role?: string; initialTab?: Tab;
+}) {
   const [data, setData] = useState<Asset360 | null>(null);
-  const [tab, setTab] = useState<Tab>("Resumen");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [trendSignal, setTrendSignal] = useState<string>("");
+
+  const reload = useCallback(() => {
+    fetch(apiUrl(`/api/assets/${assetId}`))
+      .then((r) => r.json())
+      .then((d: Asset360) => {
+        setData(d);
+        setTrendSignal((prev) => prev || d.currentValues[0]?.signal || "");
+      });
+  }, [assetId]);
 
   useEffect(() => {
     let live = true;
@@ -72,6 +88,7 @@ export function Asset360Modal({ assetId, onClose }: { assetId: string; onClose: 
           <Asset360Body
             data={data} tab={tab} setTab={setTab} trend={trend}
             trendSignal={trendSignal} onPickSignal={loadTrend} onClose={onClose}
+            role={role} onChanged={reload}
           />
         )}
       </div>
@@ -80,15 +97,17 @@ export function Asset360Modal({ assetId, onClose }: { assetId: string; onClose: 
 }
 
 function Asset360Body({
-  data, tab, setTab, trend, trendSignal, onPickSignal, onClose,
+  data, tab, setTab, trend, trendSignal, onPickSignal, onClose, role, onChanged,
 }: {
   data: Asset360; tab: Tab; setTab: (t: Tab) => void; trend: TrendPoint[];
   trendSignal: string; onPickSignal: (s: string) => void; onClose: () => void;
+  role: string; onChanged: () => void;
 }) {
   const e = data.equipment;
   const pending = data.workOrders.filter((w) => w.status !== "completed").length;
   const completed = data.workOrders.filter((w) => w.status === "completed").length;
   const completion = data.workOrders.length ? Math.round((completed / data.workOrders.length) * 100) : 0;
+  const openFindings = data.nonConformities.filter((n) => n.status !== "closed").length;
 
   return (
     <>
@@ -124,13 +143,18 @@ function Asset360Body({
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`eam-focus -mb-px whitespace-nowrap rounded-t-md border-b-2 px-3 py-2.5 text-xs font-medium transition-colors ${
+            className={`eam-focus -mb-px flex items-center gap-1.5 whitespace-nowrap rounded-t-md border-b-2 px-3 py-2.5 text-xs font-medium transition-colors ${
               tab === t
                 ? "border-[var(--accent)] text-[var(--foreground)]"
                 : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             }`}
           >
-            {t}
+            {t === "SOP" ? "SOP · Hallazgos" : t}
+            {t === "SOP" && openFindings > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                {openFindings}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -142,10 +166,13 @@ function Asset360Body({
         {tab === "Planes" && <PlansTab plans={data.plans} />}
         {tab === "Monitoreo" && <MonitoringTab predictive={data.predictive} trend={trend} signal={trendSignal} />}
         {tab === "Tiempo real" && (
-          <RealtimeTab values={data.currentValues} trend={trend} signal={trendSignal} onPickSignal={onPickSignal} />
+          <RealtimeTab code={data.equipment.code} values={data.currentValues} trend={trend} signal={trendSignal} onPickSignal={onPickSignal} />
         )}
         {tab === "Repuestos" && <PartsTab parts={data.parts} />}
-        {tab === "SOP" && <SopTab docs={data.documents} ncs={data.nonConformities} />}
+        {tab === "SOP" && (
+          <SopTab docs={data.documents} ncs={data.nonConformities} findingHistory={data.findingHistory}
+            canTreat={can(role, "close_nc")} onChanged={onChanged} />
+        )}
       </div>
     </>
   );
@@ -204,8 +231,19 @@ function OverviewTab({ e }: { e: Equipment }) {
 function Th({ children }: { children: React.ReactNode }) {
   return <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">{children}</th>;
 }
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-3 py-2 text-xs text-[var(--foreground)]">{children}</td>;
+function Td({ children, colSpan }: { children: React.ReactNode; colSpan?: number }) {
+  return <td colSpan={colSpan} className="px-3 py-2 text-xs text-[var(--foreground)]">{children}</td>;
+}
+
+/** Combina el snapshot app/field de una NC por señal. */
+function mergeReadings(readings: NonConformity["readings"]): { label: string; unit: string; app?: number; field?: number }[] {
+  const by = new Map<string, { label: string; unit: string; app?: number; field?: number }>();
+  for (const r of readings ?? []) {
+    const e = by.get(r.signal) ?? { label: r.label, unit: r.unit };
+    if (r.source === "app") e.app = r.value; else e.field = r.value;
+    by.set(r.signal, e);
+  }
+  return [...by.values()];
 }
 function Table({ head, children }: { head: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -299,14 +337,35 @@ function MonitoringTab({ predictive, trend, signal }: { predictive: PredictivePr
 }
 
 function RealtimeTab({
-  values, trend, signal, onPickSignal,
-}: { values: SignalValue[]; trend: TrendPoint[]; signal: string; onPickSignal: (s: string) => void }) {
+  code, values, trend, signal, onPickSignal,
+}: { code: string; values: SignalValue[]; trend: TrendPoint[]; signal: string; onPickSignal: (s: string) => void }) {
   const lim = controlLimits(trend);
-  if (values.length === 0) return <Empty text="Sin señales en tiempo real." />;
+  // Con la fuente única el valor "respira" server-side: pollear /api/live/[code]
+  // para verlo moverse, igual que el gemelo y el QR. Sin ella, queda el snapshot.
+  const [live, setLive] = useState<SignalValue[] | null>(null);
+  useEffect(() => {
+    if (!LIVE_UNIFIED) return;
+    let alive = true;
+    const poll = async () => {
+      try {
+        const r = await fetch(apiUrl(`/api/live/${encodeURIComponent(code)}`));
+        if (!r.ok || !alive) return;
+        const d = await r.json();
+        setLive((d.signals ?? []).map((s: { signal: string; value: number; unit: string; ts: string }) => ({
+          signal: s.signal, value: s.value, unit: s.unit, ts: s.ts, quality: "good" as const,
+        })));
+      } catch { /* mantener último */ }
+    };
+    poll();
+    const t = setInterval(poll, 4000);
+    return () => { alive = false; clearInterval(t); };
+  }, [code]);
+  const shown = live ?? values;
+  if (shown.length === 0) return <Empty text="Sin señales en tiempo real." />;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {values.map((v) => (
+        {shown.map((v) => (
           <button
             key={v.signal}
             onClick={() => onPickSignal(v.signal)}
@@ -339,7 +398,17 @@ function PartsTab({ parts }: { parts: SparePart[] }) {
   );
 }
 
-function SopTab({ docs, ncs }: { docs: SeDocument[]; ncs: NonConformity[] }) {
+const FINDING_TYPE_LABELS: Record<string, string> = {
+  corrosion: "Corrosión", fuga_sello: "Fuga / sello", vibracion: "Vibración anormal", otro: "Otro",
+};
+
+function SopTab({ docs, ncs, findingHistory, canTreat, onChanged }: {
+  docs: SeDocument[]; ncs: NonConformity[]; findingHistory: EquipmentFindingRecurrence[];
+  canTreat: boolean; onChanged: () => void;
+}) {
+  const [treating, setTreating] = useState<NonConformity | null>(null);
+  const countByType = new Map(findingHistory.map((f) => [f.findingType, f.count]));
+
   return (
     <div className="space-y-4">
       <section>
@@ -355,22 +424,59 @@ function SopTab({ docs, ncs }: { docs: SeDocument[]; ncs: NonConformity[] }) {
       <section>
         <h3 className="mb-2 text-sm font-semibold">No-conformidades</h3>
         {ncs.length === 0 ? <Empty text="Sin no-conformidades." /> : (
-          <Table head={<><Th>Código</Th><Th>Severidad</Th><Th>Descripción</Th><Th>Estado</Th><Th>Autor</Th><Th>Reportada</Th></>}>
+          <Table head={<><Th>Código</Th><Th>Severidad</Th><Th>Categoría</Th><Th>Descripción</Th><Th>Estado</Th><Th>Autor</Th><Th>Reportada</Th><Th>{""}</Th></>}>
             {ncs.map((n) => (
-              <tr key={n.id}>
-                <Td>{n.code}</Td><Td><StateBadge state={n.severity} size="sm" /></Td>
-                <Td>{n.description}</Td><Td><StateBadge state={n.status.replace("_", "")} label={n.status.replace("_", " ")} size="sm" /></Td>
-                <Td>
-                  {n.raisedBy
-                    ? <>{n.raisedBy}<span className="text-[var(--muted-foreground)]">{n.raisedByRole ? ` · ${n.raisedByRole}` : ""}</span></>
-                    : <span className="text-[var(--muted-foreground)]">sistema</span>}
-                </Td>
-                <Td>{fmtDateTime(n.raisedAt)}</Td>
-              </tr>
+              <Fragment key={n.id}>
+                <tr>
+                  <Td>{n.code}</Td><Td><StateBadge state={n.severity} size="sm" /></Td>
+                  <Td>
+                    <span className="text-[var(--muted-foreground)]">{FINDING_TYPE_LABELS[n.findingType] ?? n.findingType}</span>
+                    {(countByType.get(n.findingType) ?? 0) > 1 && (
+                      <span className="ml-1.5 rounded bg-[var(--muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted-foreground)]">
+                        levantado {countByType.get(n.findingType)}×
+                      </span>
+                    )}
+                  </Td>
+                  <Td>{n.description}</Td><Td><StateBadge state={n.status.replace("_", "")} label={n.status.replace("_", " ")} size="sm" /></Td>
+                  <Td>
+                    {n.raisedBy
+                      ? <>{n.raisedBy}<span className="text-[var(--muted-foreground)]">{n.raisedByRole ? ` · ${n.raisedByRole}` : ""}</span></>
+                      : <span className="text-[var(--muted-foreground)]">sistema</span>}
+                  </Td>
+                  <Td>{fmtDateTime(n.raisedAt)}</Td>
+                  <Td>
+                    <button onClick={() => setTreating(n)} className="rounded border border-[var(--border)] px-2 py-1 text-[11px] hover:bg-[var(--muted)]">
+                      {canTreat ? "Tratar" : "Ver log"}
+                    </button>
+                  </Td>
+                </tr>
+                {(n.readings?.length ?? 0) > 0 && (
+                  <tr>
+                    <Td colSpan={8}>
+                      <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">Datos al levantar · </span>
+                      <span className="text-[11px] text-[var(--muted-foreground)]">
+                        {mergeReadings(n.readings!).map((r) => (
+                          <span key={r.label} className="mr-3 inline-block font-mono">
+                            {r.label}: {r.app != null ? r.app : "—"}{r.field != null ? ` (terreno ${r.field})` : ""} {r.unit}
+                          </span>
+                        ))}
+                      </span>
+                    </Td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </Table>
         )}
       </section>
+      {treating && (
+        <FindingTreatDialog
+          nc={treating}
+          canTreat={canTreat}
+          onClose={() => setTreating(null)}
+          onTreated={() => { onChanged(); setTreating(null); }}
+        />
+      )}
     </div>
   );
 }

@@ -53,13 +53,22 @@ export function AppShellWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
+  // Cómo se obtuvo la identidad: "demo" (elegida sin clave) o "password".
+  const [via, setVia] = useState<"demo" | "password" | null>(null);
+  // Identidad de plataforma (Tier0), independiente del usuario de la demo.
+  const [esAdmin, setEsAdmin] = useState(false);
+  const [nombrePlataforma, setNombrePlataforma] = useState<string | null>(null);
   const [check, setCheck] = useState<{ path: string; estado: Estado }>({
     path: pathname,
     estado: "verificando",
   });
 
   const publica = esPublica(pathname);
-  const estado: Estado = user
+  // Un admin de Tier0 alcanza para pintar el Shell aunque no haya sesión de demo.
+  // Si no, Administración —que es función del plano de PLATAFORMA— quedaría
+  // atrapada detrás del login de personajes ficticios de la planta, y el
+  // operador se comería un rebote a /login teniendo credencial válida.
+  const estado: Estado = user || esAdmin
     ? "identificado"
     : check.path === pathname
       ? check.estado
@@ -68,15 +77,31 @@ export function AppShellWrapper({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Con la sesión ya resuelta no se re-verifica en cada navegación: desmontaría
     // el Shell y haría parpadear el spinner en cada click del menú.
-    if (user) return;
+    if (user || esAdmin) return;
 
     let cancelado = false;
     const marcar = (e: Estado) => {
       if (!cancelado) setCheck({ path: pathname, estado: e });
     };
 
+    // La identidad de plataforma se consulta SIEMPRE y antes que nada: es la que
+    // puede habilitar el Shell por sí sola. Va primero que el corte por cookie
+    // de demo justamente porque un operador puede no tener ninguna.
+    const plataforma = fetch(apiUrl("/api/platform/me"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const admin = Boolean(d?.admin);
+        if (!cancelado && admin) {
+          setEsAdmin(true);
+          setNombrePlataforma(d?.displayName ?? null);
+        }
+        return admin;
+      })
+      .catch(() => false);
+
     if (!hayCookieDeSesion()) {
-      marcar("anonimo");
+      // Sin sesión de demo, el veredicto lo da la plataforma.
+      plataforma.then((admin) => { if (!admin) marcar("anonimo"); });
       return;
     }
 
@@ -86,6 +111,7 @@ export function AppShellWrapper({ children }: { children: ReactNode }) {
         if (cancelado) return;
         if (d?.user) {
           setUser(d.user as SessionUser);
+          setVia(d.via === "demo" ? "demo" : "password");
           setCheck({ path: pathname, estado: "identificado" });
         } else {
           marcar("anonimo");
@@ -98,27 +124,60 @@ export function AppShellWrapper({ children }: { children: ReactNode }) {
     };
   }, [pathname, user]);
 
-  // La redirección vive en su propio efecto y NO en el render: navegar mientras
-  // React renderiza es parte de lo que hacía el rebote tan rápido y silencioso.
+  // Anónimo YA NO REBOTA AL LOGIN. Esta app es una muestra de capacidades: tiene
+  // que abrir sin clave para quien recibe el link. En vez de navegar a /login,
+  // toma una identidad del plantel (`/api/auth/assume` sin body → un Supervisor)
+  // y sigue de largo. La sesión queda marcada `via: "demo"`, que alcanza para
+  // recorrer y operar la demo pero NO para firmar una observación desde el QR de
+  // un activo — eso lo corta el servidor en `requirePassword`.
+  //
+  // Vive en su propio efecto y no en el render por lo mismo que la redirección
+  // que reemplaza: tocar la sesión mientras React renderiza es parte de lo que
+  // hacía el rebote tan rápido y silencioso.
   useEffect(() => {
-    if (!publica && estado === "anonimo") router.push("/login");
-  }, [publica, estado, router]);
+    if (publica || estado !== "anonimo" || esAdmin) return;
+    let cancelado = false;
+    fetch(apiUrl("/api/auth/assume"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelado || !d?.user) return;
+        setUser(d.user as SessionUser);
+        setVia("demo");
+        setCheck({ path: pathname, estado: "identificado" });
+      })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, [publica, estado, esAdmin, pathname]);
 
   if (publica) return <>{children}</>;
 
-  if (estado === "identificado" && user) {
+  if (estado === "identificado" && (user || esAdmin)) {
     return (
       <Shell
         modules={defaultModules}
         user={user}
-        onSwitchUser={() => {
-          // Limpiar el estado ANTES de navegar: si no, el botón "atrás" del
-          // navegador vuelve a pintar el Shell de una sesión que ya no existe.
-          fetch(apiUrl("/api/auth/logout"), { method: "POST" }).then(() => {
-            setUser(null);
-            setCheck({ path: pathname, estado: "anonimo" });
-            router.push("/login");
+        via={via}
+        esAdminPlataforma={esAdmin}
+        nombrePlataforma={nombrePlataforma}
+        onElegirPersona={async (userId) => {
+          // Cambio en el lugar, sin pasar por /login ni por el logout: la
+          // identidad de la demo se elige, no se acredita. `router.refresh()`
+          // vuelve a pedir los server components para que lo que dependa del rol
+          // —permisos, columnas, acciones habilitadas— se pinte con el nuevo.
+          const r = await fetch(apiUrl("/api/auth/assume"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId }),
           });
+          if (!r.ok) return;
+          const d = await r.json();
+          setUser(d.user as SessionUser);
+          setVia("demo");
+          router.refresh();
         }}
       >
         {children}
