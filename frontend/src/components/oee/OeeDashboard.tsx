@@ -52,11 +52,6 @@ export function OeeDashboard({ summary, productionTrend }: { summary: OeeSummary
   const p = summary.plant;
   const th = summary.thresholds;
   const trainBars = summary.trains.map((t) => ({ code: t.code, oee: t.oee, band: oeeBand(t.oee, th) }));
-  const loss = [
-    { label: "Disponibilidad", value: summary.pillarLoss.availability },
-    { label: "Rendimiento", value: summary.pillarLoss.performance },
-    { label: "Calidad", value: summary.pillarLoss.quality },
-  ];
   return (
     <div className="space-y-4">
       {/* KPIs */}
@@ -163,24 +158,8 @@ export function OeeDashboard({ summary, productionTrend }: { summary: OeeSummary
         </div>
       </div>
 
-      {/* Pareto + pérdidas por pilar */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ParetoCard causes={summary.paretoCauses} windowDays={summary.window.days} />
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 text-sm font-semibold">Pérdida de OEE por pilar</div>
-          <div className="space-y-3">
-            {loss.map((l) => (
-              <div key={l.label}>
-                <div className="mb-1 flex justify-between text-xs"><span>{l.label}</span><span className="font-mono">-{l.value} pts</span></div>
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-red-500/70" style={{ width: `${Math.min(l.value * 2, 100)}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">Puntos de OEE perdidos frente al ideal (100%) en cada pilar. El pilar con mayor pérdida marca dónde atacar primero.</p>
-        </div>
-      </div>
+      {/* Pareto de paradas */}
+      <ParetoCard causes={summary.paretoCauses} windowDays={summary.window.days} />
     </div>
   );
 }

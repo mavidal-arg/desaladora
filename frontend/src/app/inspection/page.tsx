@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/PageHeader";
 import { sap, seSuite } from "@/lib/adapters";
+import { getCurrentUser } from "@/lib/auth";
 import { InspectionClient } from "./InspectionClient";
 
 export const dynamic = "force-dynamic";
@@ -7,15 +8,16 @@ export const dynamic = "force-dynamic";
 export default async function InspectionPage() {
   // Las observaciones de terreno (las que entran por el QR) también viven acá:
   // son inspección, y hasta ahora no aparecían en ninguna lista del menú.
-  const [routes, ncs, equipment] = await Promise.all([
+  const [routes, ncs, equipment, user] = await Promise.all([
     seSuite.listInspectionRoutes(),
     seSuite.listNonConformities(),
     sap.listEquipment(),
+    getCurrentUser(),
   ]);
   return (
     <div>
       <PageHeader title="Inspección y Cumplimiento" subtitle="Rondas · Equipos especiales · Instrumentos · Observaciones de terreno" />
-      <InspectionClient routes={routes} ncs={ncs} equipment={equipment} />
+      <InspectionClient routes={routes} ncs={ncs} equipment={equipment} role={user?.role ?? "Lector"} />
     </div>
   );
 }

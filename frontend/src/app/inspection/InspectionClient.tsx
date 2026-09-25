@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import { StatCard, Empty, fmtDate, fmtDateTime } from "@/components/uikit";
 import { StateBadge } from "@/components/mes";
 import { TabBar } from "@/components/TabBar";
+import { RaiseObservationDialog } from "@/components/RaiseObservationDialog";
+import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import type { Equipment, InspectionRoute, NonConformity, ObservationReading } from "@/lib/adapters/types";
 
@@ -14,11 +18,13 @@ const catOf: Record<string, InspectionRoute["category"]> = {
   "Rondas": "patrol", "Equipos especiales": "special", "Instrumentos": "measuring",
 };
 
-export function InspectionClient({ routes, ncs, equipment }: {
-  routes: InspectionRoute[]; ncs: NonConformity[]; equipment: Equipment[];
+export function InspectionClient({ routes, ncs, equipment, role }: {
+  routes: InspectionRoute[]; ncs: NonConformity[]; equipment: Equipment[]; role: string;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState(TABS[0]);
   const [openNc, setOpenNc] = useState<string | null>(null);
+  const [showRaise, setShowRaise] = useState(false);
   const now = Date.now();
   const allTasks = routes.flatMap((r) => r.tasks);
   const counts = {
@@ -45,10 +51,18 @@ export function InspectionClient({ routes, ncs, equipment }: {
 
       {tab === "Observaciones de terreno" ? (
         <>
-          <p className="mb-3 text-[11px] text-[var(--muted-foreground)]">
-            Lo que se levanta escaneando el QR del equipo, con quién lo reportó y a qué hora. Tocá una fila para ver los datos que se veían en ese momento.
-            {deTerreno.length > 0 && <> {deTerreno.length} de {observaciones.length} vienen de terreno; el resto las generó el sistema.</>}
-          </p>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <p className="text-[11px] text-[var(--muted-foreground)]">
+              Lo que se levanta escaneando el QR del equipo o registrando acá directamente, con quién lo reportó y a qué hora. Tocá una fila para ver los datos que se veían en ese momento.
+              {deTerreno.length > 0 && <> {deTerreno.length} de {observaciones.length} vienen de terreno; el resto las generó el sistema.</>}
+            </p>
+            {can(role, "raise_observation") && (
+              <button onClick={() => setShowRaise(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90">
+                <Plus className="h-3.5 w-3.5" /> Nuevo levantamiento
+              </button>
+            )}
+          </div>
           {observaciones.length === 0 ? <Empty text="Sin observaciones registradas." /> : (
             <div className="space-y-2">
               {observaciones.map((n) => {
@@ -103,6 +117,14 @@ export function InspectionClient({ routes, ncs, equipment }: {
             );
           })}
         </div>
+      )}
+
+      {showRaise && (
+        <RaiseObservationDialog
+          equipment={equipment}
+          onClose={() => setShowRaise(false)}
+          onCreated={() => router.refresh()}
+        />
       )}
     </div>
   );
